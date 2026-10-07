@@ -1,0 +1,13 @@
+.role-selection { min-height: 100vh; background: #fff8f8; color: #24191c; font-family: "DM Sans", Arial, sans-serif; }
+.role-announcement { background: #24191c; color: #fff; padding: 12px 20px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+.role-card { width: min(920px, calc(100% - 40px)); min-height: 570px; margin: 48px auto; display: grid; grid-template-columns: 1fr 1fr; background: #fff; border: 1px solid #ead8dc; box-shadow: 0 24px 70px rgba(94, 42, 57, .12); }
+.role-copy { padding: 92px 70px; background: linear-gradient(145deg, #fff6f6, #f6dbe1); display: flex; flex-direction: column; justify-content: center; }
+.role-eyebrow { margin: 0 0 18px; color: #a34563; font-size: 10px; font-weight: 800; letter-spacing: .2em; }
+.role-copy h1 { margin: 0; font-family: Georgia, serif; font-size: clamp(48px, 6vw, 72px); font-weight: 500; letter-spacing: -.06em; line-height: .95; }
+.role-copy h1 span { color: #bc5f78; }.role-copy > p:last-child { max-width: 270px; margin: 28px 0 0; color: #725e63; font-size: 16px; line-height: 1.7; }
+.role-actions { padding: 72px 58px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.role-option, .role-admin { width: 100%; font: inherit; cursor: pointer; text-align: left; }
+.role-option { position: relative; min-height: 106px; padding: 24px 50px 22px 24px; border: 1px solid #e7d6da; border-radius: 4px; background: #fff; color: #24191c; transition: transform .18s ease, box-shadow .18s ease; }
+.role-option:hover { transform: translateY(-2px); box-shadow: 0 12px 25px rgba(94, 42, 57, .12); }.role-option span, .role-option small { display:block; }.role-option span { font-family: Georgia, serif; font-size: 25px; }.role-option small { margin-top: 7px; color: #7a686c; font-size: 12px; }.role-option b { position: absolute; right: 22px; top: 39px; font-size: 22px; font-weight: 400; }
+.role-option-primary { background:#24191c; border-color:#24191c; color: #fff; }.role-option-primary small { color:#f5dfe4; }.role-admin { margin-top: 12px; padding: 13px 0; border: 0; background: transparent; color: #9c405c; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; text-align:center; }
+@media (max-width: 700px) { .role-card { grid-template-columns: 1fr; margin: 22px auto; }.role-copy, .role-actions { padding: 48px 30px; }.role-copy { min-height: 270px; }.role-actions { padding-top: 32px; } }
