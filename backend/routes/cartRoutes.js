@@ -4,6 +4,7 @@ const router = express.Router();
 
 const db = require("../config/db");
 const authenticateToken = require("../middleware/authMiddleware");
+const { notifyUser } = require("../utils/notifications");
 
 // Get the logged-in customer's cart
 router.get("/", authenticateToken, (req, res) => {
@@ -51,14 +52,20 @@ router.get("/", authenticateToken, (req, res) => {
         ci.product_id,
         p.product_name,
         p.product_image,
+        p.category,
         ci.quantity,
         ci.unit_price,
         ci.size,
+        ci.wrap_style,
+        ci.gift_message,
+        COALESCE(ps.stock_quantity, 0) AS stock_quantity,
         ci.created_at,
         ci.updated_at
       FROM cart_items ci
       INNER JOIN products p
         ON ci.product_id = p.product_id
+      LEFT JOIN product_stock ps
+        ON ps.product_id = ci.product_id
       WHERE ci.cart_id = ?
       ORDER BY ci.cart_item_id ASC
     `;
@@ -156,10 +163,12 @@ router.post("/", authenticateToken, (req, res) => {
   });
 });
 
-// Add a product to the logged-in customer's cart
+// Add a product to the logged-in customer's cart.
+// The cart row is created automatically on first add so new customers can
+// shop without a separate setup step.
 router.post("/items", authenticateToken, (req, res) => {
   const userId = req.user.user_id;
-  const { product_id, quantity, size } = req.body;
+  const { product_id, quantity, size, wrap_style, gift_message } = req.body;
 
   // Validate required fields
   if (!product_id || quantity === undefined) {
@@ -168,11 +177,20 @@ router.post("/items", authenticateToken, (req, res) => {
     });
   }
 
-  if (quantity <= 0) {
+  const requestedQuantity = Number(quantity);
+
+  if (!Number.isInteger(requestedQuantity) || requestedQuantity <= 0) {
     return res.status(400).json({
-      message: "Quantity must be greater than 0."
+      message: "Quantity must be a positive whole number."
     });
   }
+
+  const cleanWrapStyle = wrap_style
+    ? String(wrap_style).slice(0, 50)
+    : null;
+  const cleanGiftMessage = gift_message
+    ? String(gift_message).slice(0, 255)
+    : null;
 
   // Find the customer's cart
   const cartSql = `
@@ -191,23 +209,41 @@ router.post("/items", authenticateToken, (req, res) => {
       });
     }
 
-    if (cartResults.length === 0) {
-      return res.status(404).json({
-        message: "Cart not found. Please create a cart first."
-      });
+    if (cartResults.length > 0) {
+      return continueWithCart(cartResults[0].cart_id);
     }
 
-    const cartId = cartResults[0].cart_id;
+    // First-time shopper: create the cart, then continue.
+    db.query(
+      "INSERT INTO carts (user_id) VALUES (?)",
+      [userId],
+      (createErr, createResult) => {
+        if (createErr) {
+          console.error("Error creating cart:", createErr);
 
-    // Get the product and its current price
+          return res.status(500).json({
+            message: "Failed to create cart"
+          });
+        }
+
+        return continueWithCart(createResult.insertId);
+      }
+    );
+  });
+
+  function continueWithCart(cartId) {
+    // Get the product, its current price, and its stock level
     const productSql = `
       SELECT
-        product_id,
-        product_name,
-        price,
-        status
-      FROM products
-      WHERE product_id = ?
+        p.product_id,
+        p.product_name,
+        p.price,
+        p.status,
+        COALESCE(ps.stock_quantity, 0) AS stock_quantity
+      FROM products p
+      LEFT JOIN product_stock ps
+        ON ps.product_id = p.product_id
+      WHERE p.product_id = ?
       LIMIT 1
     `;
 
@@ -234,6 +270,8 @@ router.post("/items", authenticateToken, (req, res) => {
           message: "This product is not available."
         });
       }
+
+      const stockQuantity = Number(product.stock_quantity);
 
       // Use the price from the database
       const unitPrice = product.price;
@@ -268,18 +306,34 @@ router.post("/items", authenticateToken, (req, res) => {
             const existingItem = existingItems[0];
 
             const newQuantity =
-              existingItem.quantity + Number(quantity);
+              existingItem.quantity + requestedQuantity;
+
+            if (newQuantity > stockQuantity) {
+              return res.status(409).json({
+                message:
+                  stockQuantity <= 0
+                    ? `${product.product_name} is out of stock.`
+                    : `Only ${stockQuantity} left in stock for ${product.product_name}.`
+              });
+            }
 
             const updateSql = `
               UPDATE cart_items
               SET quantity = ?,
+                  wrap_style = ?,
+                  gift_message = ?,
                   updated_at = CURRENT_TIMESTAMP
               WHERE cart_item_id = ?
             `;
 
             db.query(
               updateSql,
-              [newQuantity, existingItem.cart_item_id],
+              [
+                newQuantity,
+                cleanWrapStyle,
+                cleanGiftMessage,
+                existingItem.cart_item_id
+              ],
               (err) => {
                 if (err) {
                   console.error("Error updating cart item:", err);
@@ -288,6 +342,12 @@ router.post("/items", authenticateToken, (req, res) => {
                     message: "Failed to update cart item"
                   });
                 }
+
+                notifyUser(userId, {
+                  type: "cart",
+                  title: "Added to your bag",
+                  message: `${requestedQuantity} × ${product.product_name} was added to your bag (now ${newQuantity}).`
+                });
 
                 return res.status(200).json({
                   message: "Cart item quantity updated successfully.",
@@ -300,6 +360,15 @@ router.post("/items", authenticateToken, (req, res) => {
             return;
           }
 
+          if (requestedQuantity > stockQuantity) {
+            return res.status(409).json({
+              message:
+                stockQuantity <= 0
+                  ? `${product.product_name} is out of stock.`
+                  : `Only ${stockQuantity} left in stock for ${product.product_name}.`
+            });
+          }
+
           // Product/size doesn't exist → create new cart item
           const insertSql = `
             INSERT INTO cart_items
@@ -308,9 +377,11 @@ router.post("/items", authenticateToken, (req, res) => {
               product_id,
               quantity,
               unit_price,
-              size
+              size,
+              wrap_style,
+              gift_message
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
           `;
 
           db.query(
@@ -318,9 +389,11 @@ router.post("/items", authenticateToken, (req, res) => {
             [
               cartId,
               product_id,
-              quantity,
+              requestedQuantity,
               unitPrice,
-              size || null
+              size || null,
+              cleanWrapStyle,
+              cleanGiftMessage
             ],
             (err, result) => {
               if (err) {
@@ -331,21 +404,29 @@ router.post("/items", authenticateToken, (req, res) => {
                 });
               }
 
+              notifyUser(userId, {
+                type: "cart",
+                title: "Added to your bag",
+                message: `${requestedQuantity} × ${product.product_name} was added to your bag.`
+              });
+
               return res.status(201).json({
                 message: "Product added to cart successfully.",
                 cart_item_id: result.insertId,
                 cart_id: cartId,
                 product_id: product_id,
-                quantity: quantity,
+                quantity: requestedQuantity,
                 unit_price: unitPrice,
-                size: size || null
+                size: size || null,
+                wrap_style: cleanWrapStyle,
+                gift_message: cleanGiftMessage
               });
             }
           );
         }
       );
     });
-  });
+  }
 });
 
 // Update the quantity of a cart item
@@ -367,44 +448,94 @@ router.put("/items/:id", authenticateToken, (req, res) => {
     });
   }
 
-  // Make sure the cart item belongs to the logged-in customer
-  const sql = `
-    UPDATE cart_items ci
+  const requestedQuantity = Number(quantity);
+
+  // Load the cart item together with its stock level so the customer
+  // cannot add more than what is actually available.
+  const itemSql = `
+    SELECT
+      ci.cart_item_id,
+      ci.quantity,
+      p.product_name,
+      COALESCE(ps.stock_quantity, 0) AS stock_quantity
+    FROM cart_items ci
     INNER JOIN carts c
       ON ci.cart_id = c.cart_id
-    SET
-      ci.quantity = ?,
-      ci.updated_at = CURRENT_TIMESTAMP
-    WHERE
-      ci.cart_item_id = ?
+    INNER JOIN products p
+      ON p.product_id = ci.product_id
+    LEFT JOIN product_stock ps
+      ON ps.product_id = ci.product_id
+    WHERE ci.cart_item_id = ?
       AND c.user_id = ?
+    LIMIT 1
   `;
 
-  db.query(
-    sql,
-    [Number(quantity), cartItemId, userId],
-    (err, result) => {
-      if (err) {
-        console.error("Error updating cart item quantity:", err);
+  db.query(itemSql, [cartItemId, userId], (err, itemResults) => {
+    if (err) {
+      console.error("Error loading cart item:", err);
 
-        return res.status(500).json({
-          message: "Failed to update cart item quantity"
-        });
-      }
-
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          message: "Cart item not found."
-        });
-      }
-
-      return res.status(200).json({
-        message: "Cart item quantity updated successfully.",
-        cart_item_id: Number(cartItemId),
-        quantity: Number(quantity)
+      return res.status(500).json({
+        message: "Failed to load cart item"
       });
     }
-  );
+
+    if (itemResults.length === 0) {
+      return res.status(404).json({
+        message: "Cart item not found."
+      });
+    }
+
+    const cartItem = itemResults[0];
+    const stockQuantity = Number(cartItem.stock_quantity);
+
+    if (requestedQuantity > stockQuantity) {
+      return res.status(409).json({
+        message:
+          stockQuantity <= 0
+            ? `${cartItem.product_name} is out of stock.`
+            : `Only ${stockQuantity} left in stock for ${cartItem.product_name}.`
+      });
+    }
+
+    // Make sure the cart item belongs to the logged-in customer
+    const sql = `
+      UPDATE cart_items ci
+      INNER JOIN carts c
+        ON ci.cart_id = c.cart_id
+      SET
+        ci.quantity = ?,
+        ci.updated_at = CURRENT_TIMESTAMP
+      WHERE
+        ci.cart_item_id = ?
+        AND c.user_id = ?
+    `;
+
+    db.query(
+      sql,
+      [requestedQuantity, cartItemId, userId],
+      (err, result) => {
+        if (err) {
+          console.error("Error updating cart item quantity:", err);
+
+          return res.status(500).json({
+            message: "Failed to update cart item quantity"
+          });
+        }
+
+        if (result.affectedRows === 0) {
+          return res.status(404).json({
+            message: "Cart item not found."
+          });
+        }
+
+        return res.status(200).json({
+          message: "Cart item quantity updated successfully.",
+          cart_item_id: Number(cartItemId),
+          quantity: requestedQuantity
+        });
+      }
+    );
+  });
 });
 
 // Clear only the cart entries copied into this customer's confirmed COD order.

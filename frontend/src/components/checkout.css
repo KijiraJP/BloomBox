@@ -609,7 +609,7 @@
 .checkout-page { min-height: 100vh; background: var(--cream); color: var(--ink); }
 .checkout-hero-content { max-width: 760px; }
 .checkout-hero-content > p:not(.eyebrow) { color: var(--muted); line-height: 1.8; max-width: 560px; }
-.checkout-back-button { margin-bottom: 22px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--rose-dark); }
+.checkout-schedule-note { color: var(--muted); line-height: 1.7; max-width: 560px; font-size: 13px; }.checkout-back-button { margin-bottom: 22px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--rose-dark); }
 .checkout-back-button:hover { color: var(--rose); }
 .checkout-section { background: #fff; }
 .checkout-main { display: flex; flex-direction: column; gap: 22px; }

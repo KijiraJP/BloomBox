@@ -1,7 +1,39 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import "../bloombox.css";
 
-function CustomerHome({ user, onLogout, onNavigate }) {
+function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSelect }) {
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+
+  // Live products for the "Best-loved blooms" section
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/products");
+        const data = await response.json();
+
+        if (!response.ok) {
+          return;
+        }
+
+        setFeaturedProducts(data.slice(0, 3));
+      } catch (error) {
+        console.error("Featured products error:", error);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const formatPrice = (price) => {
+    const value = Number(price);
+    const safeValue = Number.isFinite(value) ? value : 0;
+
+    return safeValue.toLocaleString("en-PH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   return (
     <div className="customer-home">
 
@@ -30,9 +62,9 @@ function CustomerHome({ user, onLogout, onNavigate }) {
           <button
             type="button"
             onClick={() => onNavigate("cart")}
-          >
-            Cart
-          </button>
+            >
+            Cart{cartCount > 0 ? ` (${cartCount})` : ""}
+            </button>
           <a href="#bouquet">Create Your Bouquet</a>
           <a href="#delivery">Delivery</a>
         </div>
@@ -79,12 +111,13 @@ function CustomerHome({ user, onLogout, onNavigate }) {
             </p>
 
             <div className="hero-buttons">
-              <a
-                href="#shop"
+              <button
+                type="button"
                 className="btn btn-primary"
+                onClick={() => onNavigate("catalog")}
               >
                 Shop the Collection
-              </a>
+              </button>
 
               <a
                 href="#bouquet"
@@ -158,12 +191,13 @@ function CustomerHome({ user, onLogout, onNavigate }) {
               uniquely yours with our custom bouquet experience.
             </p>
 
-            <a
-              href="#shop"
+            <button
+              type="button"
               className="text-link"
+              onClick={() => onNavigate("catalog")}
             >
               Explore our collection →
-            </a>
+            </button>
 
           </div>
 
@@ -186,7 +220,11 @@ function CustomerHome({ user, onLogout, onNavigate }) {
 
           <div className="category-grid">
 
-            <article className="category-card">
+            <article
+              className="category-card"
+              style={{ cursor: "pointer" }}
+              onClick={() => onNavigate("catalog")}
+            >
               <img
                 src="https://images.unsplash.com/photo-1494336934270-15c0c5c4d1f2?auto=format&fit=crop&w=800&q=80"
                 alt="Romantic flowers"
@@ -197,7 +235,11 @@ function CustomerHome({ user, onLogout, onNavigate }) {
               </div>
             </article>
 
-            <article className="category-card">
+            <article
+              className="category-card"
+              style={{ cursor: "pointer" }}
+              onClick={() => onNavigate("catalog")}
+            >
               <img
                 src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?auto=format&fit=crop&w=800&q=80"
                 alt="Birthday flowers"
@@ -208,7 +250,11 @@ function CustomerHome({ user, onLogout, onNavigate }) {
               </div>
             </article>
 
-            <article className="category-card">
+            <article
+              className="category-card"
+              style={{ cursor: "pointer" }}
+              onClick={() => onNavigate("catalog")}
+            >
               <img
                 src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=800&q=80"
                 alt="Thank you flowers"
@@ -224,6 +270,7 @@ function CustomerHome({ user, onLogout, onNavigate }) {
         </section>
 
         {/* Featured Products */}
+        {featuredProducts.length > 0 && (
         <section className="section products-section">
 
           <div className="section-heading">
@@ -238,48 +285,39 @@ function CustomerHome({ user, onLogout, onNavigate }) {
 
           <div className="product-grid">
 
-            <article className="product-card">
-              <img
-                src="https://images.unsplash.com/photo-1527061011665-3652c757a4d4?auto=format&fit=crop&w=800&q=80"
-                alt="Blush Bouquet"
-              />
+            {featuredProducts.map((product) => (
+              <article
+                className="product-card"
+                key={product.product_id}
+                style={{ cursor: "pointer" }}
+                onClick={() =>
+                  onProductSelect && onProductSelect(product)
+                }
+              >
+                {product.product_image ? (
+                  <img
+                    src={product.product_image}
+                    alt={product.product_name}
+                  />
+                ) : (
+                  <img
+                    src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=800&q=80"
+                    alt={product.product_name}
+                  />
+                )}
 
-              <div className="product-info">
-                <h3>The Blush Bouquet</h3>
-                <p>Soft pink roses and seasonal blooms.</p>
-                <strong>₱1,850</strong>
-              </div>
-            </article>
-
-            <article className="product-card">
-              <img
-                src="https://images.unsplash.com/photo-1490750967868-88aa4486c946?auto=format&fit=crop&w=800&q=80"
-                alt="Rose Romance"
-              />
-
-              <div className="product-info">
-                <h3>Rose Romance</h3>
-                <p>A classic arrangement of roses.</p>
-                <strong>₱2,250</strong>
-              </div>
-            </article>
-
-            <article className="product-card">
-              <img
-                src="https://images.unsplash.com/photo-1526047932273-341f2a7631f9?auto=format&fit=crop&w=800&q=80"
-                alt="Petal Poetry"
-              />
-
-              <div className="product-info">
-                <h3>Petal Poetry</h3>
-                <p>A delicate mix of seasonal flowers.</p>
-                <strong>₱1,650</strong>
-              </div>
-            </article>
+                <div className="product-info">
+                  <h3>{product.product_name}</h3>
+                  <p>{product.description || product.category}</p>
+                  <strong>₱{formatPrice(product.price)}</strong>
+                </div>
+              </article>
+            ))}
 
           </div>
 
         </section>
+        )}
 
         {/* Custom Bouquet */}
         <section
@@ -306,7 +344,7 @@ function CustomerHome({ user, onLogout, onNavigate }) {
             </p>
 
             <a
-              href="#create-bouquet"
+              href="#bouquet"
               className="btn btn-primary"
             >
               Create Your Bouquet
@@ -434,12 +472,13 @@ function CustomerHome({ user, onLogout, onNavigate }) {
             happiness today.
           </h2>
 
-          <a
-            href="#shop"
+          <button
+            type="button"
             className="btn btn-primary"
+            onClick={() => onNavigate("catalog")}
           >
             Shop Flowers
-          </a>
+          </button>
 
         </section>
 

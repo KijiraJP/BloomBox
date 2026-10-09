@@ -193,6 +193,33 @@
   border-radius: 100px;
 }
 
+.stock-note {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #2f8a5f;
+}
+
+.stock-note.low {
+  color: #c4762a;
+}
+
+.stock-note.out {
+  color: #b0434f;
+}
+
+.cart-message {
+  margin-top: 14px;
+  padding: 11px 15px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--pink-light);
+  color: var(--rose-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .product-desc {
   color: var(--muted);
   font-size: 13px;

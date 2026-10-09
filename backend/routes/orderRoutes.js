@@ -3,6 +3,7 @@ const router = express.Router();
 
 const db = require("../config/db");
 const authenticateToken = require("../middleware/authMiddleware");
+const { notifyUser, notifyRole } = require("../utils/notifications");
 
 // Completed order history for the logged-in customer only.
 router.get("/history", authenticateToken, (req, res) => {
@@ -12,8 +13,8 @@ router.get("/history", authenticateToken, (req, res) => {
       o.total_amount,
       o.order_status,
       o.created_at,
-      d.delivery_date,
-      d.delivery_time,
+      DATE_FORMAT(d.delivery_date, '%Y-%m-%d') AS delivery_date,
+      TIME_FORMAT(d.delivery_time, '%H:%i') AS delivery_time,
       d.delivery_status,
       p.payment_method,
       p.payment_status,
@@ -116,7 +117,7 @@ router.post("/", authenticateToken, (req, res) => {
         const cartId = cartResults[0].cart_id;
 
         // Step 3: Get all items in the customer's cart
-        const itemsSql = `
+          const itemsSql = `
           SELECT
             ci.cart_item_id,
             ci.product_id,
@@ -124,6 +125,8 @@ router.post("/", authenticateToken, (req, res) => {
             ci.quantity,
             ci.unit_price,
             ci.size,
+            ci.wrap_style,
+            ci.gift_message,
             COALESCE(ps.stock_quantity, 0) AS stock_quantity
           FROM cart_items ci
           INNER JOIN products p
@@ -193,6 +196,8 @@ router.post("/", authenticateToken, (req, res) => {
               quantity,
               unitPrice,
               item.size,
+              item.wrap_style,
+              item.gift_message,
               subtotal
             ];
           });
@@ -234,6 +239,8 @@ router.post("/", authenticateToken, (req, res) => {
                   quantity,
                   unit_price,
                   size,
+                  wrap_style,
+                  gift_message,
                   subtotal
                 )
                 VALUES ?
@@ -257,7 +264,22 @@ router.post("/", authenticateToken, (req, res) => {
                     });
                   }
 
-                  // Step 7: Return the newly created order
+                  // Step 7: Tell the customer and the admin team
+                  notifyUser(userId, {
+                    type: "order",
+                    order_id: orderId,
+                    title: "Order received",
+                    message: `Order #${orderId} was created for ₱${totalAmount.toFixed(2)}. Complete your payment to confirm it.`
+                  });
+
+                  notifyRole("admin", {
+                    type: "order",
+                    order_id: orderId,
+                    title: "New order placed",
+                    message: `Order #${orderId} (₱${totalAmount.toFixed(2)}) is waiting for payment.`
+                  });
+
+                  // Step 8: Return the newly created order
                   return res.status(201).json({
                     message: "Order created successfully.",
                     order_id: orderId,

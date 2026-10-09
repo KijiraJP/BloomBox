@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 
 const db = require("../config/db");
+const authenticateToken = require("../middleware/authMiddleware");
+const authorizeRoles = require("../middleware/roleMiddleware");
 
 // Check stock availability for a specific product
 router.get("/check/:productId", (req, res) => {
@@ -60,8 +62,8 @@ router.get("/check/:productId", (req, res) => {
   });
 });
 
-// Add stock for a product
-router.post("/", (req, res) => {
+// Add stock for a product (admin only)
+router.post("/", authenticateToken, authorizeRoles("admin"), (req, res) => {
   const { product_id, stock_quantity } = req.body;
 
   if (!product_id || stock_quantity === undefined) {
@@ -91,8 +93,8 @@ router.post("/", (req, res) => {
   });
 });
 
-// Update stock quantity
-router.put("/:id", (req, res) => {
+// Update stock quantity (admin only)
+router.put("/:id", authenticateToken, authorizeRoles("admin"), (req, res) => {
   const stockId = req.params.id;
   const { stock_quantity } = req.body;
 
@@ -128,8 +130,8 @@ router.put("/:id", (req, res) => {
   });
 });
 
-// Delete stock record
-router.delete("/:id", (req, res) => {
+// Delete stock record (admin only)
+router.delete("/:id", authenticateToken, authorizeRoles("admin"), (req, res) => {
   const stockId = req.params.id;
 
   const sql = `

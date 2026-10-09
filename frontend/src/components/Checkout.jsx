@@ -25,6 +25,12 @@ function Checkout({ onBack, onContinue }) {
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
 
+  // Tracks what has already been created so a retry after a mid-checkout
+  // failure can never create a duplicate address, order, or delivery.
+  const [createdAddress, setCreatedAddress] = useState(null);
+  const [createdOrder, setCreatedOrder] = useState(null);
+  const [createdDelivery, setCreatedDelivery] = useState(null);
+
   useEffect(() => {
     const fetchCart = async () => {
       const token = sessionStorage.getItem("token");
@@ -159,107 +165,135 @@ function Checkout({ onBack, onContinue }) {
   try {
     setError("");
 
+    const items = cart?.items || [];
+
+    if (items.length === 0) {
+      setError("Your bag is empty. Add some blooms before checking out.");
+      return;
+    }
+
     // -----------------------------------
     // STEP 1 — Save delivery address
     // -----------------------------------
 
-    const addressResponse = await fetch(
-      "http://localhost:5000/api/addresses",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          street: street.trim(),
-          barangay: barangay.trim(),
-          city: city.trim(),
-          postalCode: postalCode.trim(),
-          landmark: landmark.trim()
-        })
-      }
-    );
+    let addressId = createdAddress?.address_id;
 
-    const addressData = await addressResponse.json();
-
-    if (!addressResponse.ok) {
-      setError(
-        addressData.message ||
-        "Unable to save delivery address."
+    if (!addressId) {
+      const addressResponse = await fetch(
+        "http://localhost:5000/api/addresses",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            street: street.trim(),
+            barangay: barangay.trim(),
+            city: city.trim(),
+            postalCode: postalCode.trim(),
+            landmark: landmark.trim()
+          })
+        }
       );
-      return;
-    }
 
-    console.log(
-      "Address saved:",
-      addressData.address
-    );
+      const addressData = await addressResponse.json();
+
+      if (!addressResponse.ok) {
+        setError(
+          addressData.message ||
+          "Unable to save delivery address."
+        );
+        return;
+      }
+
+      addressId = addressData.address.address_id;
+      setCreatedAddress(addressData.address);
+
+      console.log(
+        "Address saved:",
+        addressData.address
+      );
+    }
 
     // -----------------------------------
     // STEP 2 — Create the order
     // -----------------------------------
 
-    const orderResponse = await fetch(
-      "http://localhost:5000/api/orders",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          address_id: addressData.address.address_id
-        })
-      }
-    );
+    let orderData = createdOrder;
 
-    const orderData = await orderResponse.json();
-
-    if (!orderResponse.ok) {
-      setError(
-        orderData.message ||
-        "Unable to create your order."
+    if (!orderData) {
+      const orderResponse = await fetch(
+        "http://localhost:5000/api/orders",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            address_id: addressId
+          })
+        }
       );
-      return;
-    }
 
-    console.log(
-      "Order created:",
-      orderData
-    );
+      orderData = await orderResponse.json();
+
+      if (!orderResponse.ok) {
+        setError(
+          orderData.message ||
+          "Unable to create your order."
+        );
+        return;
+      }
+
+      setCreatedOrder(orderData);
+
+      console.log(
+        "Order created:",
+        orderData
+      );
+    }
 
     // -----------------------------------
     // STEP 3 — Save the requested delivery schedule
     // -----------------------------------
 
-    const deliveryResponse = await fetch(
-      "http://localhost:5000/api/deliveries",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          order_id: orderData.order_id,
-          delivery_date: deliveryDate,
-          delivery_time: deliveryTime
-        })
-      }
-    );
+    let deliveryData = createdDelivery
+      ? { delivery: createdDelivery }
+      : null;
 
-    const deliveryData = await deliveryResponse.json();
-
-    if (!deliveryResponse.ok) {
-      setError(
-        deliveryData.message ||
-        "Unable to save your delivery schedule."
+    if (!deliveryData) {
+      const deliveryResponse = await fetch(
+        "http://localhost:5000/api/deliveries",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            order_id: orderData.order_id,
+            delivery_date: deliveryDate,
+            delivery_time: deliveryTime
+          })
+        }
       );
-      return;
-    }
 
-    console.log("Delivery schedule saved:", deliveryData.delivery);
+      deliveryData = await deliveryResponse.json();
+
+      if (!deliveryResponse.ok) {
+        setError(
+          deliveryData.message ||
+          "Unable to save your delivery schedule."
+        );
+        return;
+      }
+
+      setCreatedDelivery(deliveryData.delivery);
+
+      console.log("Delivery schedule saved:", deliveryData.delivery);
+    }
 
     // -----------------------------------
     // STEP 4 — Create payment attempt
@@ -296,7 +330,14 @@ function Checkout({ onBack, onContinue }) {
     );
 
     if (paymentMethod === "cod") {
-      await clearCodCartItems(orderData.order_id, token);
+      try {
+        await clearCodCartItems(orderData.order_id, token);
+      } catch (clearError) {
+        // Non-fatal: the order already exists. Turning this into an
+        // error screen would let the customer retry and create a
+        // duplicate order - leftover bag items are the lesser problem.
+        console.error("Cart clear warning:", clearError);
+      }
     }
 
     // -----------------------------------
@@ -306,7 +347,7 @@ function Checkout({ onBack, onContinue }) {
     const newCheckoutData = {
     email,
     mobileNumber,
-    address: addressData.address,
+    address: { address_id: addressId },
     deliveryDate,
     deliveryTime,
     delivery: deliveryData.delivery,
@@ -600,6 +641,14 @@ function Checkout({ onBack, onContinue }) {
                 >
                   {paymentProcessing ? "Creating retry..." : "Try Payment Again"}
                 </button>
+
+                <button
+                  type="button"
+                  className="btn checkout-continue-button"
+                  onClick={onBack}
+                >
+                  ← Back to Cart
+                </button>
               </section>
             </div>
           </div>
@@ -660,6 +709,14 @@ function Checkout({ onBack, onContinue }) {
                   disabled={paymentProcessing}
                 >
                   Simulate Test Failure
+                </button>
+
+                <button
+                  type="button"
+                  className="btn checkout-continue-button"
+                  onClick={onBack}
+                >
+                  ← Back to Cart
                 </button>
               </section>
             </div>
@@ -885,21 +942,27 @@ function Checkout({ onBack, onContinue }) {
               </p>
 
               <h2>
-                Delivery schedule
+                Preferred delivery schedule
               </h2>
+
+              <p className="checkout-schedule-note">
+                Tell us when you'd prefer your flowers to arrive — BloomBox will
+                confirm the schedule before delivery.
+              </p>
 
               <div className="checkout-form-grid">
 
                 <div className="checkout-field">
 
                   <label htmlFor="delivery-date">
-                    Delivery date
+                    Preferred date
                   </label>
 
                   <input
                     id="delivery-date"
                     type="date"
                     value={deliveryDate}
+                    min={new Date().toISOString().slice(0, 10)}
                     onChange={(event) =>
                       setDeliveryDate(event.target.value)
                     }
@@ -911,7 +974,7 @@ function Checkout({ onBack, onContinue }) {
                 <div className="checkout-field">
 
                   <label htmlFor="delivery-time">
-                    Delivery time
+                    Preferred time
                   </label>
 
                   <input
@@ -1055,7 +1118,8 @@ function Checkout({ onBack, onContinue }) {
                     </strong>
 
                     <span>
-                      {item.size} × {item.quantity}
+                      {item.size || "One size"} × {item.quantity}
+                      {item.gift_message ? " · gift note" : ""}
                     </span>
 
                   </div>
@@ -1113,8 +1177,9 @@ function Checkout({ onBack, onContinue }) {
             <button
               type="submit"
               className="btn btn-dark checkout-continue-button"
+              disabled={items.length === 0}
             >
-              Continue
+              {items.length === 0 ? "Your bag is empty" : "Continue"}
             </button>
 
           </aside>

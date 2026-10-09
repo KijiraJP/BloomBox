@@ -3,6 +3,10 @@ const router = express.Router();
 
 const db = require("../config/db");
 const authenticateToken = require("../middleware/authMiddleware");
+const { notifyUser, notifyRole } = require("../utils/notifications");
+
+// Admins get an alert when a paid order leaves stock at or below this level.
+const LOW_STOCK_THRESHOLD = 5;
 
 // Create a payment attempt
 router.post("/", authenticateToken, (req, res) => {
@@ -295,6 +299,17 @@ router.put("/:id/status", authenticateToken, (req, res) => {
               });
             }
 
+            if (payment_status === "failed") {
+              notifyUser(userId, {
+                type: "payment",
+                order_id: payment.order_id,
+                title: "Payment failed",
+                message:
+                  `Payment attempt #${payment.attempt_number} for order #${payment.order_id} failed. ` +
+                  `Your order is still pending - you can try again from checkout.`
+              });
+            }
+
             return res.status(200).json({
               message: "Payment status updated successfully.",
               payment_id: Number(paymentId),
@@ -312,6 +327,10 @@ router.put("/:id/status", authenticateToken, (req, res) => {
       // SUCCESSFUL PAYMENT + INVENTORY + ORDER CONFIRMATION
       // ---------------------------------------------------------
       function processSuccessfulPayment() {
+        // Collected during deduction, notified only after the transaction
+        // commits so admins never see alerts for rolled-back sales.
+        const lowStockItems = [];
+
         db.beginTransaction((transactionError) => {
           if (transactionError) {
             console.error(
@@ -392,6 +411,7 @@ router.put("/:id/status", authenticateToken, (req, res) => {
               // Now deduct every item.
               deductOrderInventory(
                 orderItems,
+                lowStockItems,
                 (deductError) => {
                   if (deductError) {
                     console.error(
@@ -519,6 +539,28 @@ router.put("/:id/status", authenticateToken, (req, res) => {
                                   });
                                 }
 
+                                notifyUser(userId, {
+                                  type: "payment",
+                                  order_id: payment.order_id,
+                                  title: "Payment successful",
+                                  message: `Payment for order #${payment.order_id} was confirmed. Your order is now being prepared.`
+                                });
+
+                                notifyRole("admin", {
+                                  type: "payment",
+                                  order_id: payment.order_id,
+                                  title: "Payment received",
+                                  message: `Order #${payment.order_id} was paid successfully (${transaction_reference || "reference not set"}).`
+                                });
+
+                                lowStockItems.forEach((item) => {
+                                  notifyRole("admin", {
+                                    type: "stock",
+                                    title: "Low stock alert",
+                                    message: `${item.product_name} is down to ${item.remaining} unit(s) in stock after order #${payment.order_id}.`
+                                  });
+                                });
+
                                 return res.status(200).json({
                                   message:
                                     "Payment status updated successfully.",
@@ -553,6 +595,7 @@ router.put("/:id/status", authenticateToken, (req, res) => {
       // Deduct inventory for every item in the order.
       function deductOrderInventory(
         orderItems,
+        lowStockItems,
         callback
       ) {
         let index = 0;
@@ -587,6 +630,16 @@ router.put("/:id/status", authenticateToken, (req, res) => {
                     `Stock could not be updated for ${item.product_name}.`
                   )
                 );
+              }
+
+              const remaining =
+                Number(item.stock_quantity) - Number(item.quantity);
+
+              if (remaining <= LOW_STOCK_THRESHOLD) {
+                lowStockItems.push({
+                  product_name: item.product_name,
+                  remaining: remaining
+                });
               }
 
               index += 1;

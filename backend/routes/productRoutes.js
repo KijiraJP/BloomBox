@@ -2,21 +2,26 @@ const express = require("express");
 const router = express.Router();
 
 const db = require("../config/db");
+const authenticateToken = require("../middleware/authMiddleware");
+const authorizeRoles = require("../middleware/roleMiddleware");
 
-// Get all active products
+// Get all active products (with live stock levels)
 router.get("/", (req, res) => {
   const sql = `
     SELECT
-      product_id,
-      product_name,
-      product_image,
-      description,
-      price,
-      category,
-      status
-    FROM products
-    WHERE status = 'active'
-    ORDER BY product_id DESC
+      p.product_id,
+      p.product_name,
+      p.product_image,
+      p.description,
+      p.price,
+      p.category,
+      p.status,
+      COALESCE(ps.stock_quantity, 0) AS stock_quantity
+    FROM products p
+    LEFT JOIN product_stock ps
+      ON ps.product_id = p.product_id
+    WHERE p.status = 'active'
+    ORDER BY p.product_id DESC
   `;
 
   db.query(sql, (err, results) => {
@@ -31,8 +36,8 @@ router.get("/", (req, res) => {
   });
 });
 
-// Add a new product
-router.post("/", (req, res) => {
+// Add a new product (admin only)
+router.post("/", authenticateToken, authorizeRoles("admin"), (req, res) => {
   const {
     product_name,
     product_image,
@@ -63,15 +68,29 @@ router.post("/", (req, res) => {
       });
     }
 
-    res.status(201).json({
-      message: "Product added successfully",
-      product_id: result.insertId
-    });
+    const productId = result.insertId;
+
+    // Every product needs a stock row so cart/checkout stock checks work.
+    // New products start at 0 until inventory is added.
+    db.query(
+      "INSERT INTO product_stock (product_id, stock_quantity) VALUES (?, 0)",
+      [productId],
+      (stockErr) => {
+        if (stockErr) {
+          console.error("Error creating stock row:", stockErr);
+        }
+
+        res.status(201).json({
+          message: "Product added successfully",
+          product_id: productId
+        });
+      }
+    );
   });
 });
 
-// Delete a product
-router.delete("/:id", (req, res) => {
+// Delete a product (admin only)
+router.delete("/:id", authenticateToken, authorizeRoles("admin"), (req, res) => {
   const productId = req.params.id;
 
   const sql = `

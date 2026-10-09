@@ -14,6 +14,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
 const deliveryRoutes = require("./routes/deliveryRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const app = express();
 const PORT = 5000;
@@ -31,6 +32,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/deliveries", deliveryRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
   res.json({
