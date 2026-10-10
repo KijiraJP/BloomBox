@@ -5,7 +5,7 @@ const https = require("https");
 // username and an empty password.
 const XENDIT_HOST = "api.xendit.co";
 
-function request(method, path, body) {
+function request(method, path, body, extraHeaders) {
   return new Promise((resolve, reject) => {
     const secretKey = process.env.XENDIT_SECRET_KEY;
 
@@ -24,7 +24,8 @@ function request(method, path, body) {
       method: method,
       headers: {
         Authorization: `Basic ${auth}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        ...(extraHeaders || {})
       }
     };
 
@@ -100,7 +101,37 @@ function getInvoice(invoiceId) {
   return request("GET", `/v2/invoices/${invoiceId}`);
 }
 
+// Create a dynamic QR Ph payment request (GCash, Maya and bank apps).
+// The QR payload is returned inside the actions[] array of the response.
+function createQrPaymentRequest({ referenceId, amount }) {
+  return request(
+    "POST",
+    "/v3/payment_requests",
+    {
+      reference_id: referenceId,
+      type: "PAY",
+      country: "PH",
+      currency: "PHP",
+      request_amount: Number(amount),
+      channel_code: "QRPH"
+    },
+    { "api-version": "2024-11-11" }
+  );
+}
+
+// Fetch a QR Ph payment request to check whether the customer has paid.
+function getPaymentRequest(paymentRequestId) {
+  return request(
+    "GET",
+    `/v3/payment_requests/${paymentRequestId}`,
+    null,
+    { "api-version": "2024-11-11" }
+  );
+}
+
 module.exports = {
   createInvoice,
-  getInvoice
+  getInvoice,
+  createQrPaymentRequest,
+  getPaymentRequest
 };
