@@ -31,6 +31,15 @@ router.post(
       });
     }
 
+    const requestedDateTime = new Date(`${delivery_date}T${delivery_time}:00`);
+    const now = new Date();
+
+    if (Number.isNaN(requestedDateTime.getTime()) || requestedDateTime <= now) {
+      return res.status(400).json({
+        message: "The preferred delivery time cannot be in the past."
+      });
+    }
+
     const orderSql = `
       SELECT
         o.order_id,
@@ -406,6 +415,14 @@ router.put(
         ) {
           return res.status(400).json({
             message: "A valid delivery date and time are required."
+          });
+        }
+
+        const confirmedDateTime = new Date(`${finalDate}T${finalTime}:00`);
+
+        if (Number.isNaN(confirmedDateTime.getTime()) || confirmedDateTime <= new Date()) {
+          return res.status(400).json({
+            message: "The delivery schedule cannot be in the past."
           });
         }
 

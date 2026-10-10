@@ -2,6 +2,15 @@ import React, { useEffect, useState } from "react";
 import "../bloombox.css";
 import "./checkout.css";
 
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const nowLocal = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
 function Checkout({ onBack, onContinue }) {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -962,10 +971,13 @@ function Checkout({ onBack, onContinue }) {
                     id="delivery-date"
                     type="date"
                     value={deliveryDate}
-                    min={new Date().toISOString().slice(0, 10)}
-                    onChange={(event) =>
-                      setDeliveryDate(event.target.value)
-                    }
+                    min={todayLocal()}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value && value < todayLocal()) return setDeliveryDate("");
+                      setDeliveryDate(value);
+                      if (value === todayLocal() && deliveryTime && deliveryTime <= nowLocal()) setDeliveryTime("");
+                    }}
                     required
                   />
 
@@ -981,9 +993,12 @@ function Checkout({ onBack, onContinue }) {
                     id="delivery-time"
                     type="time"
                     value={deliveryTime}
-                    onChange={(event) =>
-                      setDeliveryTime(event.target.value)
-                    }
+                    min={deliveryDate === todayLocal() ? nowLocal() : undefined}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (deliveryDate === todayLocal() && value && value <= nowLocal()) return setDeliveryTime("");
+                      setDeliveryTime(value);
+                    }}
                     required
                   />
 
