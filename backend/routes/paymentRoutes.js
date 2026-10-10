@@ -588,4 +588,101 @@ router.post("/:id/xendit/verify", authenticateToken, (req, res) => {
   });
 });
 
+// Xendit webhook: Xendit calls this after an invoice changes state.
+// No user token here - authenticity is checked with the callback token.
+// Register this URL in the Xendit dashboard as:
+//   https://<your-public-url>/api/payments/xendit/webhook
+router.post("/xendit/webhook", (req, res) => {
+  const expectedToken = process.env.XENDIT_WEBHOOK_TOKEN;
+
+  if (expectedToken) {
+    const receivedToken = req.headers["x-callback-token"];
+
+    if (receivedToken !== expectedToken) {
+      return res.status(401).json({
+        message: "Invalid webhook token."
+      });
+    }
+  }
+
+  const invoice = req.body || {};
+  const invoiceId = invoice.id;
+  const gatewayStatus = invoice.status;
+
+  if (!invoiceId || !gatewayStatus) {
+    return res.status(400).json({
+      message: "Invalid webhook payload."
+    });
+  }
+
+  const paymentSql = `
+    SELECT
+      p.payment_id,
+      p.order_id,
+      p.payment_status,
+      o.user_id
+    FROM payments p
+    INNER JOIN orders o
+      ON p.order_id = o.order_id
+    WHERE p.gateway_invoice_id = ?
+    LIMIT 1
+  `;
+
+  db.query(paymentSql, [invoiceId], (err, results) => {
+    if (err) {
+      console.error("Webhook: error finding payment:", err);
+
+      return res.status(500).json({
+        message: "Failed to find payment."
+      });
+    }
+
+    if (results.length === 0) {
+      // Acknowledge so Xendit stops retrying an invoice we don't track.
+      return res.status(200).json({
+        message: "No matching payment."
+      });
+    }
+
+    const payment = results[0];
+
+    db.query(
+      "UPDATE payments SET gateway_status = ? WHERE payment_id = ?",
+      [gatewayStatus, payment.payment_id],
+      () => {}
+    );
+
+    const isPaid = gatewayStatus === "PAID" || gatewayStatus === "SETTLED";
+
+    if (!isPaid || payment.payment_status === "successful") {
+      return res.status(200).json({
+        message: "Webhook received.",
+        gateway_status: gatewayStatus
+      });
+    }
+
+    completeSuccessfulPayment(
+      {
+        paymentId: payment.payment_id,
+        orderId: payment.order_id,
+        userId: payment.user_id,
+        transactionReference: invoiceId
+      },
+      (completionError) => {
+        if (completionError) {
+          console.error("Webhook: payment completion failed:", completionError);
+
+          return res.status(500).json({
+            message: "Failed to complete payment."
+          });
+        }
+
+        return res.status(200).json({
+          message: "Payment completed."
+        });
+      }
+    );
+  });
+});
+
 module.exports = router;
