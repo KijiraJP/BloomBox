@@ -301,7 +301,7 @@
 
 /* QR PANEL */
 .qr-panel {
-  display: flex;
+  display: none;
   gap: 28px;
   margin-top: 18px;
   padding: 26px;

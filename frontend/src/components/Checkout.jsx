@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import "../bloombox.css";
 import "./checkout.css";
 
@@ -35,7 +34,6 @@ function Checkout({ onBack, onContinue }) {
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
   const [gatewayMessage, setGatewayMessage] = useState("");
-  const [qrInfo, setQrInfo] = useState(null);
 
   // Tracks what has already been created so a retry after a mid-checkout
   // failure can never create a duplicate address, order, or delivery.
@@ -512,40 +510,6 @@ function Checkout({ onBack, onContinue }) {
     }
   };
 
-  const startQrPayment = async () => {
-    const token = sessionStorage.getItem("token");
-
-    if (!token || !paymentInfo?.payment_id) {
-      setGatewayMessage("Payment details are unavailable. Please try checkout again.");
-      return;
-    }
-
-    try {
-      setPaymentProcessing(true);
-      setGatewayMessage("");
-
-      const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/qr`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok || !data.qr_string) {
-        setGatewayMessage(data.message || "Could not create the QR payment.");
-        return;
-      }
-
-      setQrInfo(data);
-      setPaymentInfo((currentPayment) => ({ ...currentPayment, ...data }));
-    } catch (error) {
-      console.error("QR payment error:", error);
-      setGatewayMessage("Cannot connect to the server while creating the QR payment.");
-    } finally {
-      setPaymentProcessing(false);
-    }
-  };
-
   const verifyGatewayPayment = async () => {
     const token = sessionStorage.getItem("token");
 
@@ -558,13 +522,8 @@ function Checkout({ onBack, onContinue }) {
       setPaymentProcessing(true);
       setGatewayMessage("");
 
-      const verifyPath =
-        qrInfo?.qr_string || paymentInfo.gateway === "xendit_qr"
-          ? "xendit/qr/verify"
-          : "xendit/verify";
-
       const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentInfo.payment_id}/${verifyPath}`,
+        `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/verify`,
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -827,95 +786,34 @@ function Checkout({ onBack, onContinue }) {
                   </strong>
                 </div>
 
-                {qrInfo?.qr_string ? (
+                {!invoiceReady ? (
+                  <button
+                    type="button"
+                    className="btn btn-dark checkout-continue-button"
+                    onClick={startGatewayPayment}
+                    disabled={paymentProcessing}
+                  >
+                    {paymentProcessing ? "Starting payment..." : "Pay with Xendit"}
+                  </button>
+                ) : (
                   <>
-                    <div className="qr-panel">
-                      <div className="qr-code-placeholder">
-                        <QRCodeSVG
-                          value={qrInfo.qr_string}
-                          size={170}
-                          level="M"
-                          marginSize={2}
-                          fgColor="#1b1521"
-                        />
-                      </div>
-
-                      <div className="qr-instructions">
-                        <h4>Scan with GCash, Maya, or any bank app</h4>
-                        <ol>
-                          <li>Open your GCash / Maya / bank app on your phone.</li>
-                          <li>Tap "Scan QR" and scan the code on the left.</li>
-                          <li>Check the amount is exactly ₱{formatPrice(qrInfo.amount)}.</li>
-                          <li>Approve the payment, then tap Verify below.</li>
-                        </ol>
-                        <p className="qr-note">
-                          This QR can only be paid once and expires shortly. If it
-                          expires, go back and create a new one.
-                        </p>
-                      </div>
-                    </div>
+                    <a
+                      className="btn btn-dark checkout-continue-button"
+                      href={paymentInfo.checkout_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open payment page
+                    </a>
 
                     <button
                       type="button"
-                      className="btn btn-dark checkout-continue-button"
+                      className="btn checkout-continue-button"
                       onClick={verifyGatewayPayment}
                       disabled={paymentProcessing}
                     >
                       {paymentProcessing ? "Verifying..." : "I have completed payment — Verify"}
                     </button>
-
-                    <button
-                      type="button"
-                      className="btn checkout-continue-button"
-                      onClick={() => setQrInfo(null)}
-                      disabled={paymentProcessing}
-                    >
-                      ← Back to payment options
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {["gcash", "maya"].includes(paymentInfo.payment_method) && (
-                      <button
-                        type="button"
-                        className="btn btn-dark checkout-continue-button"
-                        onClick={startQrPayment}
-                        disabled={paymentProcessing}
-                      >
-                        {paymentProcessing ? "Creating QR..." : "Pay with QR Ph (GCash / Maya)"}
-                      </button>
-                    )}
-
-                    {!invoiceReady ? (
-                      <button
-                        type="button"
-                        className="btn checkout-continue-button"
-                        onClick={startGatewayPayment}
-                        disabled={paymentProcessing}
-                      >
-                        {paymentProcessing ? "Starting payment..." : "Pay on the hosted Xendit page instead"}
-                      </button>
-                    ) : (
-                      <>
-                        <a
-                          className="btn checkout-continue-button"
-                          href={paymentInfo.checkout_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Open hosted payment page
-                        </a>
-
-                        <button
-                          type="button"
-                          className="btn checkout-continue-button"
-                          onClick={verifyGatewayPayment}
-                          disabled={paymentProcessing}
-                        >
-                          {paymentProcessing ? "Verifying..." : "I have completed payment — Verify"}
-                        </button>
-                      </>
-                    )}
                   </>
                 )}
 
