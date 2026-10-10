@@ -5,7 +5,12 @@ const db = require("../config/db");
 const authenticateToken = require("../middleware/authMiddleware");
 const { notifyUser } = require("../utils/notifications");
 const { completeSuccessfulPayment } = require("../utils/paymentCompletion");
-const { createInvoice, getInvoice } = require("../utils/xendit");
+const {
+  createInvoice,
+  getInvoice,
+  createQrPaymentRequest,
+  getPaymentRequest
+} = require("../utils/xendit");
 
 // Create a payment attempt
 router.post("/", authenticateToken, (req, res) => {
@@ -588,6 +593,244 @@ router.post("/:id/xendit/verify", authenticateToken, (req, res) => {
   });
 });
 
+// Create an in-app QR Ph payment request (GCash / Maya / bank apps).
+// The customer scans the returned qr_string; there is no redirect.
+router.post("/:id/xendit/qr", authenticateToken, (req, res) => {
+  const paymentId = req.params.id;
+  const userId = req.user.user_id;
+
+  const paymentSql = `
+    SELECT
+      p.payment_id,
+      p.order_id,
+      p.attempt_number,
+      p.amount,
+      p.payment_method,
+      p.payment_status,
+      o.order_status,
+      u.email
+    FROM payments p
+    INNER JOIN orders o
+      ON p.order_id = o.order_id
+    INNER JOIN users u
+      ON o.user_id = u.user_id
+    WHERE p.payment_id = ?
+      AND o.user_id = ?
+    LIMIT 1
+  `;
+
+  db.query(paymentSql, [paymentId, userId], (err, results) => {
+    if (err) {
+      console.error("Error finding payment for QR:", err);
+
+      return res.status(500).json({
+        message: "Failed to find payment."
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        message: "Payment not found."
+      });
+    }
+
+    const payment = results[0];
+
+    if (payment.payment_status === "successful") {
+      return res.status(400).json({
+        message: "This payment has already been completed."
+      });
+    }
+
+    if (payment.payment_status === "cancelled") {
+      return res.status(400).json({
+        message: "This payment can no longer be modified."
+      });
+    }
+
+    if (payment.payment_method === "cod") {
+      return res.status(400).json({
+        message: "Cash on Delivery does not use the online gateway."
+      });
+    }
+
+    // Distinct reference keeps a fresh QR code per order + payment attempt.
+    const referenceId =
+      `bloombox_order_${payment.order_id}` +
+      `_payment_${payment.payment_id}` +
+      `_qr_attempt_${payment.attempt_number}`;
+
+    createQrPaymentRequest({ referenceId: referenceId, amount: payment.amount })
+      .then((paymentRequest) => {
+        const qrAction = (paymentRequest.actions || []).find(
+          (action) => action.descriptor === "QR_STRING"
+        );
+        const qrString = qrAction ? qrAction.value : null;
+
+        const updateSql = `
+          UPDATE payments
+          SET
+            gateway = 'xendit_qr',
+            gateway_invoice_id = ?,
+            gateway_checkout_url = NULL,
+            gateway_status = ?
+          WHERE payment_id = ?
+        `;
+
+        db.query(
+          updateSql,
+          [paymentRequest.payment_request_id, paymentRequest.status, paymentId],
+          (updateError) => {
+            if (updateError) {
+              console.error("Error saving Xendit QR details:", updateError);
+
+              return res.status(500).json({
+                message: "Failed to save the QR payment."
+              });
+            }
+
+            return res.status(201).json({
+              message: "QR Ph payment created.",
+              payment_id: Number(paymentId),
+              order_id: payment.order_id,
+              attempt_number: payment.attempt_number,
+              payment_request_id: paymentRequest.payment_request_id,
+              qr_string: qrString,
+              amount: payment.amount,
+              expires_at: paymentRequest.channel_properties
+                ? paymentRequest.channel_properties.expires_at
+                : null,
+              gateway_status: paymentRequest.status,
+              payment_status: payment.payment_status
+            });
+          }
+        );
+      })
+      .catch((qrError) => {
+        console.error("Failed to create Xendit QR payment:", qrError);
+
+        return res
+          .status(qrError.statusCode === 401 ? 401 : 502)
+          .json({
+            message: "Could not create the QR payment with Xendit."
+          });
+      });
+  });
+});
+
+// Verify a QR Ph payment request server-side and complete it if it succeeded.
+router.post("/:id/xendit/qr/verify", authenticateToken, (req, res) => {
+  const paymentId = req.params.id;
+  const userId = req.user.user_id;
+
+  const paymentSql = `
+    SELECT
+      p.payment_id,
+      p.order_id,
+      p.payment_status,
+      p.gateway,
+      p.gateway_invoice_id
+    FROM payments p
+    INNER JOIN orders o
+      ON p.order_id = o.order_id
+    WHERE p.payment_id = ?
+      AND o.user_id = ?
+    LIMIT 1
+  `;
+
+  db.query(paymentSql, [paymentId, userId], (err, results) => {
+    if (err) {
+      console.error("Error finding QR payment for verification:", err);
+
+      return res.status(500).json({
+        message: "Failed to find payment."
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        message: "Payment not found."
+      });
+    }
+
+    const payment = results[0];
+
+    if (payment.payment_status === "successful") {
+      return res.status(200).json({
+        message: "Payment already verified.",
+        payment_id: Number(paymentId),
+        order_id: payment.order_id,
+        payment_status: "successful",
+        order_status: "confirmed"
+      });
+    }
+
+    if (payment.gateway !== "xendit_qr" || !payment.gateway_invoice_id) {
+      return res.status(400).json({
+        message: "No QR Ph payment is associated with this payment."
+      });
+    }
+
+    getPaymentRequest(payment.gateway_invoice_id)
+      .then((paymentRequest) => {
+        const gatewayStatus = paymentRequest.status;
+
+        db.query(
+          "UPDATE payments SET gateway_status = ? WHERE payment_id = ?",
+          [gatewayStatus, paymentId],
+          (updateError) => {
+            if (updateError) {
+              console.error("Error updating QR gateway status:", updateError);
+            }
+          }
+        );
+
+        if (gatewayStatus === "SUCCEEDED") {
+          completeSuccessfulPayment(
+            {
+              paymentId: paymentId,
+              orderId: payment.order_id,
+              userId: userId,
+              transactionReference: payment.gateway_invoice_id
+            },
+            (completionError, result) => {
+              if (completionError) {
+                return res
+                  .status(completionError.status || 500)
+                  .json({ message: completionError.message });
+              }
+
+              return res.status(200).json({
+                message: "Payment verified successfully.",
+                payment_id: Number(paymentId),
+                order_id: result.order_id,
+                payment_status: "successful",
+                transaction_reference: result.transaction_reference,
+                order_status: "confirmed"
+              });
+            }
+          );
+          return;
+        }
+
+        return res.status(200).json({
+          message: "Payment is still pending.",
+          payment_id: Number(paymentId),
+          order_id: payment.order_id,
+          payment_status: payment.payment_status,
+          gateway_status: gatewayStatus
+        });
+      })
+      .catch((qrError) => {
+        console.error("Failed to fetch Xendit QR payment:", qrError);
+
+        return res.status(502).json({
+          message: "Could not check the payment status with Xendit."
+        });
+      });
+  });
+});
+
 // Xendit webhook: Xendit calls this after an invoice changes state.
 // No user token here - authenticity is checked with the callback token.
 // Register this URL in the Xendit dashboard as:
@@ -605,9 +848,16 @@ router.post("/xendit/webhook", (req, res) => {
     }
   }
 
-  const invoice = req.body || {};
-  const invoiceId = invoice.id;
-  const gatewayStatus = invoice.status;
+  // Invoices are posted flat; QR / payment-request events arrive wrapped in
+  // `data`. Accept both shapes and key off gateway_invoice_id either way.
+  const payload = req.body || {};
+  const data = payload.data || payload;
+  const invoiceId =
+    payload.id ||
+    data.payment_request_id ||
+    data.id ||
+    payload.payment_request_id;
+  const gatewayStatus = payload.status || data.status;
 
   if (!invoiceId || !gatewayStatus) {
     return res.status(400).json({
@@ -652,7 +902,10 @@ router.post("/xendit/webhook", (req, res) => {
       () => {}
     );
 
-    const isPaid = gatewayStatus === "PAID" || gatewayStatus === "SETTLED";
+    const isPaid =
+      gatewayStatus === "PAID" ||
+      gatewayStatus === "SETTLED" ||
+      gatewayStatus === "SUCCEEDED";
 
     if (!isPaid || payment.payment_status === "successful") {
       return res.status(200).json({
