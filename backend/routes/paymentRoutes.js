@@ -3,10 +3,9 @@ const router = express.Router();
 
 const db = require("../config/db");
 const authenticateToken = require("../middleware/authMiddleware");
-const { notifyUser, notifyRole } = require("../utils/notifications");
-
-// Admins get an alert when a paid order leaves stock at or below this level.
-const LOW_STOCK_THRESHOLD = 5;
+const { notifyUser } = require("../utils/notifications");
+const { completeSuccessfulPayment } = require("../utils/paymentCompletion");
+const { createInvoice, getInvoice } = require("../utils/xendit");
 
 // Create a payment attempt
 router.post("/", authenticateToken, (req, res) => {
@@ -249,423 +248,344 @@ router.put("/:id/status", authenticateToken, (req, res) => {
               });
             }
 
-            processSuccessfulPayment();
+            completeSuccessfulPayment(
+              {
+                paymentId: paymentId,
+                orderId: payment.order_id,
+                userId: userId,
+                transactionReference: transaction_reference
+              },
+              (completionError, result) => {
+                if (completionError) {
+                  return res
+                    .status(completionError.status || 500)
+                    .json({ message: completionError.message });
+                }
+
+                return res.status(200).json({
+                  message: "Payment status updated successfully.",
+                  payment_id: Number(paymentId),
+                  order_id: result.order_id,
+                  attempt_number: payment.attempt_number,
+                  payment_status: "successful",
+                  transaction_reference: result.transaction_reference,
+                  order_status: "confirmed"
+                });
+              }
+            );
           }
         );
-      } else {
-        updateNonSuccessfulPayment();
+        return;
       }
 
-      // ---------------------------------------------------------
-      // NON-SUCCESSFUL PAYMENT
-      // ---------------------------------------------------------
-      function updateNonSuccessfulPayment() {
+      // Non-successful payment (failed / cancelled)
+      const updateSql = `
+        UPDATE payments
+        SET
+          payment_status = ?,
+          transaction_reference = ?,
+          payment_date = CASE
+            WHEN ? = 'successful'
+            THEN CURRENT_TIMESTAMP
+            ELSE payment_date
+          END
+        WHERE payment_id = ?
+      `;
+
+      db.query(
+        updateSql,
+        [
+          payment_status,
+          transaction_reference || null,
+          payment_status,
+          paymentId
+        ],
+        (err, result) => {
+          if (err) {
+            console.error("Error updating payment:", err);
+
+            return res.status(500).json({
+              message: "Failed to update payment."
+            });
+          }
+
+          if (result.affectedRows === 0) {
+            return res.status(404).json({
+              message: "Payment not found."
+            });
+          }
+
+          if (payment_status === "failed") {
+            notifyUser(userId, {
+              type: "payment",
+              order_id: payment.order_id,
+              title: "Payment failed",
+              message:
+                `Payment attempt #${payment.attempt_number} for order #${payment.order_id} failed. ` +
+                `Your order is still pending - you can try again from checkout.`
+            });
+          }
+
+          return res.status(200).json({
+            message: "Payment status updated successfully.",
+            payment_id: Number(paymentId),
+            order_id: payment.order_id,
+            attempt_number: payment.attempt_number,
+            payment_status: payment_status,
+            transaction_reference: transaction_reference || null
+          });
+        }
+      );
+    }
+  );
+});
+
+// Create a hosted Xendit invoice for an online payment attempt.
+// The customer completes payment on the returned checkout_url.
+router.post("/:id/xendit/invoice", authenticateToken, (req, res) => {
+  const paymentId = req.params.id;
+  const userId = req.user.user_id;
+
+  const paymentSql = `
+    SELECT
+      p.payment_id,
+      p.order_id,
+      p.attempt_number,
+      p.amount,
+      p.payment_method,
+      p.payment_status,
+      o.order_status,
+      u.email
+    FROM payments p
+    INNER JOIN orders o
+      ON p.order_id = o.order_id
+    INNER JOIN users u
+      ON o.user_id = u.user_id
+    WHERE p.payment_id = ?
+      AND o.user_id = ?
+    LIMIT 1
+  `;
+
+  db.query(paymentSql, [paymentId, userId], (err, results) => {
+    if (err) {
+      console.error("Error finding payment for invoice:", err);
+
+      return res.status(500).json({
+        message: "Failed to find payment."
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        message: "Payment not found."
+      });
+    }
+
+    const payment = results[0];
+
+    if (payment.payment_status === "successful") {
+      return res.status(400).json({
+        message: "This payment has already been completed."
+      });
+    }
+
+    if (payment.payment_status === "cancelled") {
+      return res.status(400).json({
+        message: "This payment can no longer be modified."
+      });
+    }
+
+    if (payment.payment_method === "cod") {
+      return res.status(400).json({
+        message: "Cash on Delivery does not use the online gateway."
+      });
+    }
+
+    // One invoice per order + payment attempt keeps external_id unique,
+    // so a retry always produces a fresh invoice.
+    const externalId =
+      `bloombox_order_${payment.order_id}` +
+      `_payment_${payment.payment_id}` +
+      `_attempt_${payment.attempt_number}`;
+
+    createInvoice({
+      externalId: externalId,
+      amount: payment.amount,
+      payerEmail: payment.email,
+      description: `BloomBox order #${payment.order_id}`
+    })
+      .then((invoice) => {
         const updateSql = `
           UPDATE payments
           SET
-            payment_status = ?,
-            transaction_reference = ?,
-            payment_date = CASE
-              WHEN ? = 'successful'
-              THEN CURRENT_TIMESTAMP
-              ELSE payment_date
-            END
+            gateway = 'xendit',
+            gateway_invoice_id = ?,
+            gateway_checkout_url = ?,
+            gateway_status = ?
           WHERE payment_id = ?
         `;
 
         db.query(
           updateSql,
-          [
-            payment_status,
-            transaction_reference || null,
-            payment_status,
-            paymentId
-          ],
-          (err, result) => {
-            if (err) {
+          [invoice.id, invoice.invoice_url, invoice.status, paymentId],
+          (updateError) => {
+            if (updateError) {
               console.error(
-                "Error updating payment:",
-                err
+                "Error saving Xendit invoice details:",
+                updateError
               );
 
               return res.status(500).json({
-                message: "Failed to update payment."
+                message: "Failed to save the payment invoice."
               });
             }
 
-            if (result.affectedRows === 0) {
-              return res.status(404).json({
-                message: "Payment not found."
-              });
-            }
-
-            if (payment_status === "failed") {
-              notifyUser(userId, {
-                type: "payment",
-                order_id: payment.order_id,
-                title: "Payment failed",
-                message:
-                  `Payment attempt #${payment.attempt_number} for order #${payment.order_id} failed. ` +
-                  `Your order is still pending - you can try again from checkout.`
-              });
-            }
-
-            return res.status(200).json({
-              message: "Payment status updated successfully.",
+            return res.status(201).json({
+              message: "Xendit invoice created.",
               payment_id: Number(paymentId),
               order_id: payment.order_id,
               attempt_number: payment.attempt_number,
-              payment_status: payment_status,
-              transaction_reference:
-                transaction_reference || null
+              invoice_id: invoice.id,
+              gateway_invoice_id: invoice.id,
+              checkout_url: invoice.invoice_url,
+              gateway_status: invoice.status,
+              payment_status: payment.payment_status
             });
           }
         );
-      }
+      })
+      .catch((invoiceError) => {
+        console.error("Failed to create Xendit invoice:", invoiceError);
 
-      // ---------------------------------------------------------
-      // SUCCESSFUL PAYMENT + INVENTORY + ORDER CONFIRMATION
-      // ---------------------------------------------------------
-      function processSuccessfulPayment() {
-        // Collected during deduction, notified only after the transaction
-        // commits so admins never see alerts for rolled-back sales.
-        const lowStockItems = [];
+        return res
+          .status(invoiceError.statusCode === 401 ? 401 : 502)
+          .json({
+            message: "Could not create the payment invoice with Xendit."
+          });
+      });
+  });
+});
 
-        db.beginTransaction((transactionError) => {
-          if (transactionError) {
-            console.error(
-              "Error starting payment transaction:",
-              transactionError
-            );
+// Verify a Xendit invoice server-side and complete the payment if it was paid.
+// This avoids needing a public webhook URL for local development.
+router.post("/:id/xendit/verify", authenticateToken, (req, res) => {
+  const paymentId = req.params.id;
+  const userId = req.user.user_id;
 
-            return res.status(500).json({
-              message: "Failed to start payment transaction."
-            });
-          }
+  const paymentSql = `
+    SELECT
+      p.payment_id,
+      p.order_id,
+      p.payment_status,
+      p.gateway,
+      p.gateway_invoice_id
+    FROM payments p
+    INNER JOIN orders o
+      ON p.order_id = o.order_id
+    WHERE p.payment_id = ?
+      AND o.user_id = ?
+    LIMIT 1
+  `;
 
-          // Get every product in the order and lock its inventory row.
-          const orderItemsSql = `
-            SELECT
-              oi.product_id,
-              oi.quantity,
-              p.product_name,
-              ps.stock_id,
-              ps.stock_quantity
-            FROM order_items oi
-            INNER JOIN products p
-              ON oi.product_id = p.product_id
-            INNER JOIN product_stock ps
-              ON oi.product_id = ps.product_id
-            WHERE oi.order_id = ?
-            FOR UPDATE
-          `;
+  db.query(paymentSql, [paymentId, userId], (err, results) => {
+    if (err) {
+      console.error("Error finding payment for verification:", err);
 
-          db.query(
-            orderItemsSql,
-            [payment.order_id],
-            (itemsError, orderItems) => {
-              if (itemsError) {
-                console.error(
-                  "Error checking order inventory:",
-                  itemsError
-                );
+      return res.status(500).json({
+        message: "Failed to find payment."
+      });
+    }
 
-                return db.rollback(() => {
-                  res.status(500).json({
-                    message:
-                      "Failed to check inventory."
-                  });
-                });
-              }
+    if (results.length === 0) {
+      return res.status(404).json({
+        message: "Payment not found."
+      });
+    }
 
-              if (orderItems.length === 0) {
-                return db.rollback(() => {
-                  res.status(400).json({
-                    message:
-                      "No order items were found."
-                  });
-                });
-              }
+    const payment = results[0];
 
-              // Check every item BEFORE deducting anything.
-              for (const item of orderItems) {
-                const availableStock =
-                  Number(item.stock_quantity);
+    if (payment.payment_status === "successful") {
+      return res.status(200).json({
+        message: "Payment already verified.",
+        payment_id: Number(paymentId),
+        order_id: payment.order_id,
+        payment_status: "successful",
+        order_status: "confirmed"
+      });
+    }
 
-                const requestedQuantity =
-                  Number(item.quantity);
+    if (!payment.gateway_invoice_id) {
+      return res.status(400).json({
+        message: "No Xendit invoice is associated with this payment."
+      });
+    }
 
-                if (availableStock < requestedQuantity) {
-                  return db.rollback(() => {
-                    res.status(400).json({
-                      message:
-                        `Insufficient stock for ${item.product_name}. ` +
-                        `Available: ${availableStock}. ` +
-                        `Requested: ${requestedQuantity}.`
-                    });
-                  });
-                }
-              }
+    getInvoice(payment.gateway_invoice_id)
+      .then((invoice) => {
+        const gatewayStatus = invoice.status;
 
-              // All items have enough stock.
-              // Now deduct every item.
-              deductOrderInventory(
-                orderItems,
-                lowStockItems,
-                (deductError) => {
-                  if (deductError) {
-                    console.error(
-                      "Error deducting inventory:",
-                      deductError
-                    );
-
-                    return db.rollback(() => {
-                      res.status(500).json({
-                        message:
-                          "Payment could not be completed because inventory could not be updated."
-                      });
-                    });
-                  }
-
-                  // Mark payment successful.
-                  const updatePaymentSql = `
-                    UPDATE payments
-                    SET
-                      payment_status = 'successful',
-                      transaction_reference = ?,
-                      payment_date = CURRENT_TIMESTAMP
-                    WHERE payment_id = ?
-                  `;
-
-                  db.query(
-                    updatePaymentSql,
-                    [
-                      transaction_reference || null,
-                      paymentId
-                    ],
-                    (paymentError, paymentResult) => {
-                      if (paymentError) {
-                        console.error(
-                          "Error updating successful payment:",
-                          paymentError
-                        );
-
-                        return db.rollback(() => {
-                          res.status(500).json({
-                            message:
-                              "Payment could not be completed."
-                          });
-                        });
-                      }
-
-                      if (
-                        paymentResult.affectedRows === 0
-                      ) {
-                        return db.rollback(() => {
-                          res.status(404).json({
-                            message:
-                              "Payment not found."
-                          });
-                        });
-                      }
-
-                      // Confirm the order.
-                      const confirmOrderSql = `
-                        UPDATE orders
-                        SET order_status = 'confirmed'
-                        WHERE order_id = ?
-                          AND order_status = 'pending'
-                      `;
-
-                      db.query(
-                        confirmOrderSql,
-                        [payment.order_id],
-                        (orderError, orderResult) => {
-                          if (orderError) {
-                            console.error(
-                              "Error confirming order:",
-                              orderError
-                            );
-
-                            return db.rollback(() => {
-                              res.status(500).json({
-                                message:
-                                  "Payment could not be completed because the order could not be confirmed."
-                              });
-                            });
-                          }
-
-                          if (
-                            orderResult.affectedRows === 0
-                          ) {
-                            return db.rollback(() => {
-                              res.status(400).json({
-                                message:
-                                  "Order could not be confirmed."
-                              });
-                            });
-                          }
-
-                          clearPaidCartItems(
-                            payment.order_id,
-                            (clearCartError) => {
-                              if (clearCartError) {
-                                console.error(
-                                  "Error clearing paid cart items:",
-                                  clearCartError
-                                );
-
-                                return db.rollback(() => {
-                                  res.status(500).json({
-                                    message:
-                                      "Payment could not be completed because the cart could not be updated."
-                                  });
-                                });
-                              }
-
-                              // Inventory, payment, order, and cart all succeeded.
-                              db.commit((commitError) => {
-                                if (commitError) {
-                                  console.error(
-                                    "Error committing payment transaction:",
-                                    commitError
-                                  );
-
-                                  return db.rollback(() => {
-                                    res.status(500).json({
-                                      message:
-                                        "Payment transaction could not be completed."
-                                    });
-                                  });
-                                }
-
-                                notifyUser(userId, {
-                                  type: "payment",
-                                  order_id: payment.order_id,
-                                  title: "Payment successful",
-                                  message: `Payment for order #${payment.order_id} was confirmed. Your order is now being prepared.`
-                                });
-
-                                notifyRole("admin", {
-                                  type: "payment",
-                                  order_id: payment.order_id,
-                                  title: "Payment received",
-                                  message: `Order #${payment.order_id} was paid successfully (${transaction_reference || "reference not set"}).`
-                                });
-
-                                lowStockItems.forEach((item) => {
-                                  notifyRole("admin", {
-                                    type: "stock",
-                                    title: "Low stock alert",
-                                    message: `${item.product_name} is down to ${item.remaining} unit(s) in stock after order #${payment.order_id}.`
-                                  });
-                                });
-
-                                return res.status(200).json({
-                                  message:
-                                    "Payment status updated successfully.",
-                                  payment_id:
-                                    Number(paymentId),
-                                  order_id:
-                                    payment.order_id,
-                                  attempt_number:
-                                    payment.attempt_number,
-                                  payment_status:
-                                    "successful",
-                                  transaction_reference:
-                                    transaction_reference ||
-                                    null,
-                                  order_status:
-                                    "confirmed"
-                                });
-                              });
-                            }
-                          );
-                        }
-                      );
-                    }
-                  );
-                }
+        // Remember the latest gateway status for display/diagnostics.
+        db.query(
+          "UPDATE payments SET gateway_status = ? WHERE payment_id = ?",
+          [gatewayStatus, paymentId],
+          (updateError) => {
+            if (updateError) {
+              console.error(
+                "Error updating gateway status:",
+                updateError
               );
             }
-          );
-        });
-      }
-
-      // Deduct inventory for every item in the order.
-      function deductOrderInventory(
-        orderItems,
-        lowStockItems,
-        callback
-      ) {
-        let index = 0;
-
-        function deductNextItem() {
-          if (index >= orderItems.length) {
-            return callback(null);
           }
+        );
 
-          const item = orderItems[index];
-
-          const updateStockSql = `
-            UPDATE product_stock
-            SET stock_quantity = stock_quantity - ?
-            WHERE stock_id = ?
-          `;
-
-          db.query(
-            updateStockSql,
-            [
-              Number(item.quantity),
-              item.stock_id
-            ],
-            (error, result) => {
-              if (error) {
-                return callback(error);
+        if (gatewayStatus === "PAID" || gatewayStatus === "SETTLED") {
+          completeSuccessfulPayment(
+            {
+              paymentId: paymentId,
+              orderId: payment.order_id,
+              userId: userId,
+              transactionReference: invoice.id
+            },
+            (completionError, result) => {
+              if (completionError) {
+                return res
+                  .status(completionError.status || 500)
+                  .json({ message: completionError.message });
               }
 
-              if (result.affectedRows === 0) {
-                return callback(
-                  new Error(
-                    `Stock could not be updated for ${item.product_name}.`
-                  )
-                );
-              }
-
-              const remaining =
-                Number(item.stock_quantity) - Number(item.quantity);
-
-              if (remaining <= LOW_STOCK_THRESHOLD) {
-                lowStockItems.push({
-                  product_name: item.product_name,
-                  remaining: remaining
-                });
-              }
-
-              index += 1;
-              deductNextItem();
+              return res.status(200).json({
+                message: "Payment verified successfully.",
+                payment_id: Number(paymentId),
+                order_id: result.order_id,
+                payment_status: "successful",
+                transaction_reference: result.transaction_reference,
+                order_status: "confirmed"
+              });
             }
           );
+          return;
         }
 
-        deductNextItem();
-      }
+        // Not paid yet (PENDING / EXPIRED / others) - report the current state.
+        return res.status(200).json({
+          message:
+            gatewayStatus === "EXPIRED"
+              ? "The payment invoice has expired."
+              : "Payment is still pending.",
+          payment_id: Number(paymentId),
+          order_id: payment.order_id,
+          payment_status: payment.payment_status,
+          gateway_status: gatewayStatus
+        });
+      })
+      .catch((invoiceError) => {
+        console.error("Failed to fetch Xendit invoice:", invoiceError);
 
-      // Remove only cart items copied into this paid order. Items added later
-      // remain in the customer's cart.
-      function clearPaidCartItems(orderId, callback) {
-        const clearCartSql = `
-          DELETE ci
-          FROM cart_items ci
-          INNER JOIN order_items oi
-            ON oi.cart_item_id = ci.cart_item_id
-          WHERE oi.order_id = ?
-        `;
-
-        db.query(clearCartSql, [orderId], callback);
-      }
-    }
-  );
+        return res.status(502).json({
+          message: "Could not check the payment status with Xendit."
+        });
+      });
+  });
 });
 
 module.exports = router;

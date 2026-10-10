@@ -226,6 +226,10 @@ CREATE TABLE payments (
                                       NOT NULL DEFAULT 'pending',
   transaction_reference VARCHAR(255)  NULL,
   payment_date          DATETIME      NULL,   -- set to CURRENT_TIMESTAMP on success
+  gateway               VARCHAR(50)   NULL,   -- e.g. 'xendit' when a hosted gateway invoice was created
+  gateway_invoice_id    VARCHAR(100)  NULL,   -- gateway invoice id (Xendit)
+  gateway_checkout_url  VARCHAR(500)  NULL,   -- hosted checkout page for the customer
+  gateway_status        VARCHAR(50)   NULL,   -- last known gateway status (PENDING/PAID/SETTLED/EXPIRED)
   created_at            TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (payment_id),
   KEY idx_payments_order_status (order_id, payment_status),
