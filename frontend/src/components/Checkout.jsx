@@ -35,6 +35,8 @@ function Checkout({ user, onBack, onContinue }) {
   const [paymentResult, setPaymentResult] = useState(null);
   const [gatewayMessage, setGatewayMessage] = useState("");
   const [gatewayInProgress, setGatewayInProgress] = useState(false);
+  const [gatewayInterrupted, setGatewayInterrupted] = useState(false);
+  const [gatewayPollTimer, setGatewayPollTimer] = useState(null);
 
   // Tracks what has already been created so a retry after a mid-checkout
   // failure can never create a duplicate address, order, or delivery.
@@ -380,6 +382,7 @@ function Checkout({ user, onBack, onContinue }) {
       setPaymentProcessing(true);
       setGatewayMessage("");
       setGatewayInProgress(false);
+      setGatewayInterrupted(false);
 
       const response = await fetch(
         `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/invoice`,
@@ -390,6 +393,7 @@ function Checkout({ user, onBack, onContinue }) {
 
       if (!response.ok) {
         setGatewayInProgress(false);
+        setGatewayInterrupted(true);
         setGatewayMessage(data.message || "Could not start the online payment.");
         return;
       }
@@ -398,7 +402,9 @@ function Checkout({ user, onBack, onContinue }) {
 
       window.open(data.checkout_url, "_blank", "noopener");
       setGatewayInProgress(true);
-      setGatewayMessage("Opening Xendit checkout. Complete your payment there...");
+      setGatewayInterrupted(false);
+      setGatewayMessage("");
+      startPollGateway();
     } catch (error) {
       console.error("Gateway payment error:", error);
       setGatewayMessage("Cannot connect to the server while starting payment.");
@@ -407,7 +413,45 @@ function Checkout({ user, onBack, onContinue }) {
     }
   };
 
-  const verifyGatewayPayment = async () => {
+  const startPollGateway = () => {
+    if (gatewayPollTimer) {
+      clearInterval(gatewayPollTimer);
+    }
+
+    const timer = setInterval(async () => {
+      const token = sessionStorage.getItem("token");
+      if (!token || !paymentInfo?.payment_id) return;
+
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/verify`,
+          { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await response.json();
+        if (!response.ok) return;
+
+        if (data.payment_status === "successful") {
+          if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+          setGatewayPollTimer(null);
+          setPaymentResult(data);
+          onContinue({ ...checkoutData, paymentResult: data });
+          return;
+        }
+
+        setPaymentInfo((current) => ({ ...current, ...data }));
+      } catch (error) {
+        // ignore
+      }
+    }, 2000);
+
+    setGatewayPollTimer(timer);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+    };
+  }, [gatewayPollTimer]);
     const token = sessionStorage.getItem("token");
 
     if (!token || !paymentInfo?.payment_id) {
@@ -728,31 +772,27 @@ function Checkout({ user, onBack, onContinue }) {
                   </>
                 ) : gatewayInProgress ? (
                   <>
-                    <h2>Processing Payment</h2>
+                    <h2>Processing Payment...</h2>
                     <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
-                      Waiting for Xendit checkout to complete...
+                      Please complete the checkout in the Xendit window.
+                    </p>
+                  </>
+                ) : gatewayInterrupted || invoiceReady ? (
+                  <>
+                    <h2>Payment Interrupted</h2>
+                    <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
+                      The Xendit checkout was closed or interrupted.
                     </p>
                     <button
                       type="button"
                       className="btn btn-dark checkout-continue-button"
-                      onClick={verifyGatewayPayment}
+                      onClick={startGatewayPayment}
                       disabled={paymentProcessing}
                     >
-                      {paymentProcessing ? "Checking..." : "Check Payment Status"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn checkout-continue-button"
-                      onClick={async () => {
-                        setGatewayInProgress(false);
-                        setGatewayMessage("Payment interrupted. You can retry below.");
-                        setPaymentInfo((current) => ({ ...current, gateway_invoice_id: null, checkout_url: null }));
-                      }}
-                    >
-                      Payment was interrupted / closed
+                      {paymentProcessing ? "Starting payment..." : "Retry Payment"}
                     </button>
                   </>
-                ) : !invoiceReady ? (
+                ) : (
                   <>
                     <h2>Payment pending</h2>
                     <button
@@ -762,29 +802,6 @@ function Checkout({ user, onBack, onContinue }) {
                       disabled={paymentProcessing}
                     >
                       {paymentProcessing ? "Starting payment..." : "Proceed to Payment"}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <h2>Payment Failed / Interrupted</h2>
-                    <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
-                      The Xendit checkout was closed or payment failed.
-                    </p>
-                    <button
-                      type="button"
-                      className="btn btn-dark checkout-continue-button"
-                      onClick={startGatewayPayment}
-                      disabled={paymentProcessing}
-                    >
-                      {paymentProcessing ? "Reopening..." : "Retry Payment"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn checkout-continue-button"
-                      onClick={verifyGatewayPayment}
-                      disabled={paymentProcessing}
-                    >
-                      {paymentProcessing ? "Checking..." : "Check Payment Status"}
                     </button>
                   </>
                 )}
