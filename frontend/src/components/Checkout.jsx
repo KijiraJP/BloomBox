@@ -35,8 +35,8 @@ function Checkout({ user, onBack, onContinue }) {
   const [paymentResult, setPaymentResult] = useState(null);
   const [gatewayMessage, setGatewayMessage] = useState("");
   const [gatewayInProgress, setGatewayInProgress] = useState(false);
-  const [gatewayInterrupted, setGatewayInterrupted] = useState(false);
-  const [gatewayPollTimer, setGatewayPollTimer] = useState(null);
+  const [timeoutSeconds, setTimeoutSeconds] = useState(300); // 5 min
+  const [timeoutTimer, setTimeoutTimer] = useState(null);
 
   // Tracks what has already been created so a retry after a mid-checkout
   // failure can never create a duplicate address, order, or delivery.
@@ -420,9 +420,13 @@ function Checkout({ user, onBack, onContinue }) {
     if (gatewayPollTimer) {
       clearInterval(gatewayPollTimer);
     }
+    if (timeoutTimer) {
+      clearInterval(timeoutTimer);
+    }
 
     let tries = 0;
-    const maxTries = 30; // ~60s if 2s to detect closed tab faster for testing
+    const maxTries = 150; // 5 minutes at 2s
+    setTimeoutSeconds(300);
     const timer = setInterval(async () => {
       const token = sessionStorage.getItem("token");
       if (!token || !paymentInfo?.payment_id) return;
@@ -440,6 +444,8 @@ function Checkout({ user, onBack, onContinue }) {
             setGatewayInterrupted(true);
             clearInterval(timer);
             setGatewayPollTimer(null);
+            if (timeoutTimer) clearInterval(timeoutTimer);
+            setTimeoutTimer(null);
           }
           return;
         }
@@ -447,6 +453,8 @@ function Checkout({ user, onBack, onContinue }) {
         if (data.payment_status === "successful") {
           clearInterval(timer);
           setGatewayPollTimer(null);
+          if (timeoutTimer) clearInterval(timeoutTimer);
+          setTimeoutTimer(null);
           setPaymentResult(data);
           onContinue({ ...checkoutData, paymentResult: data });
           return;
@@ -459,6 +467,8 @@ function Checkout({ user, onBack, onContinue }) {
           setGatewayInterrupted(true);
           clearInterval(timer);
           setGatewayPollTimer(null);
+          if (timeoutTimer) clearInterval(timeoutTimer);
+          setTimeoutTimer(null);
         }
       } catch (error) {
         if (tries > maxTries) {
@@ -466,16 +476,31 @@ function Checkout({ user, onBack, onContinue }) {
           setGatewayInterrupted(true);
           clearInterval(timer);
           setGatewayPollTimer(null);
+          if (timeoutTimer) clearInterval(timeoutTimer);
+          setTimeoutTimer(null);
         }
       }
     }, 2000);
 
+    const t = setInterval(() => {
+      setTimeoutSeconds((s) => {
+        if (s <= 1) {
+          clearInterval(t);
+          setTimeoutTimer(null);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+
     setGatewayPollTimer(timer);
+    setTimeoutTimer(t);
   };
 
   useEffect(() => {
     return () => {
       if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+      if (timeoutTimer) clearInterval(timeoutTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -754,12 +779,23 @@ function Checkout({ user, onBack, onContinue }) {
                 ) : gatewayInProgress ? (
                   <>
                     <h2>Processing Payment...</h2>
+                    <p className="checkout-schedule-note" style={{ marginBottom: "5px" }}>
+                      Time remaining: {Math.floor(timeoutSeconds / 60)}:{String(timeoutSeconds % 60).padStart(2, "0")}
+                    </p>
+                    {paymentInfo?.checkout_url && (
+                      <p className="checkout-schedule-note" style={{ marginBottom: "10px", fontSize: "11px" }}>
+                        Can't redirect to link?{" "}
+                        <a href={paymentInfo.checkout_url} target="_blank" rel="noopener noreferrer">
+                          Click here to proceed to another tab
+                        </a>
+                      </p>
+                    )}
                   </>
                 ) : gatewayInterrupted ? (
                   <>
-                    <h2>Payment Interrupted</h2>
+                    <h2>Payment Pending</h2>
                     <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
-                      The Xendit checkout was closed or interrupted.
+                      Payment Timeout
                     </p>
                     <button
                       type="button"
@@ -769,6 +805,13 @@ function Checkout({ user, onBack, onContinue }) {
                     >
                       {paymentProcessing ? "Starting payment..." : "Retry Payment"}
                     </button>
+                    {paymentInfo?.checkout_url && (
+                      <p className="checkout-schedule-note" style={{ marginBottom: "10px", fontSize: "11px" }}>
+                        <a href={paymentInfo.checkout_url} target="_blank" rel="noopener noreferrer">
+                          Click here to return to Xendit checkout
+                        </a>
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>
