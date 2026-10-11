@@ -1,0 +1,408 @@
+.bouquet-builder,.builder-start,.builder-state{min-height:100vh;background:linear-gradient(120deg,#fffaf7 0%,#fff5f6 52%,#f8e4e9 100%);color:var(--ink);font-family:var(--sans);padding:38px clamp(22px,5vw,80px) 70px}.builder-start,.builder-state{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}.builder-state h1,.builder-start h1,.builder-header h1{font-family:var(--serif);font-weight:500;line-height:.98}.builder-state h1{font-size:clamp(2.4rem,5vw,4.5rem);margin:14px 0}.builder-back{align-self:flex-start;text-transform:uppercase;letter-spacing:.14em;font-weight:700;font-size:.68rem;color:var(--rose-dark);padding:7px 0}.builder-start h1{font-size:clamp(3rem,7vw,5.7rem);margin:28px 0 16px}.builder-start em,.builder-header em{color:var(--rose);font-style:italic}.builder-lede{max-width:490px;line-height:1.7;color:var(--muted);font-size:1.05rem}.builder-size-picker{display:grid;grid-template-columns:repeat(3,minmax(170px,1fr));gap:16px;width:min(760px,100%);margin:38px 0 22px}.size-choice{background:#fff;border:1px solid var(--line);border-radius:18px;text-align:left;padding:25px;transition:.2s}.size-choice:hover,.size-choice.is-selected{transform:translateY(-3px);border-color:var(--rose);box-shadow:0 18px 30px rgba(113,42,60,.11)}.size-choice span,.size-choice strong,.size-choice small{display:block}.size-choice span{font-family:var(--serif);font-size:1.55rem}.size-choice strong{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;margin:18px 0 6px}.size-choice small{color:var(--muted)}.builder-primary{border-radius:6px;background:var(--ink);color:#fff;padding:15px 23px;text-transform:uppercase;letter-spacing:.13em;font-size:.77rem;font-weight:700;transition:.2s}.builder-primary:hover:not(:disabled){background:var(--rose-dark);transform:translateY(-2px)}button:disabled{opacity:.5;cursor:not-allowed}.builder-secondary{border:1px solid var(--ink);border-radius:6px;padding:10px 14px;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em}.builder-text-button{font-size:.74rem;text-decoration:underline;color:var(--rose-dark)}.builder-header{max-width:1440px;margin:0 auto 25px;display:grid;grid-template-columns:1fr 2fr 1fr;align-items:start;gap:20px}.builder-header h1{font-size:clamp(2.2rem,4vw,4.25rem);margin-top:8px}.builder-progress{text-align:right;padding-top:24px}.builder-progress strong,.builder-progress span{display:block}.builder-progress strong{font-family:var(--serif);font-size:1.8rem}.builder-progress span{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.builder-feedback{max-width:1440px;margin:0 auto 18px;background:#fff;border:1px solid #ead3d9;border-left:4px solid var(--rose);padding:12px 16px;border-radius:6px;color:var(--rose-dark);font-size:.85rem}.builder-feedback.is-error{border-left-color:#a12f40;color:#8d2133}.builder-layout{max-width:1440px;margin:auto;display:grid;grid-template-columns:minmax(255px,.85fr) minmax(440px,1.55fr) minmax(270px,.9fr);gap:20px;align-items:start}.panel-card{background:rgba(255,255,255,.82);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 38px rgba(95,45,55,.07)}.builder-catalog,.builder-summary{padding:23px}.panel-heading h2{font-family:var(--serif);font-size:1.7rem;font-weight:500;margin:6px 0}.panel-heading span{font-size:.76rem;color:var(--muted);line-height:1.45;display:block}.catalog-flower-list{margin-top:20px}.builder-flower{display:grid;grid-template-columns:47px 1fr 32px;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}.builder-flower:last-child{border-bottom:0}.flower-thumb{height:47px;border-radius:50%;background:var(--pink);overflow:hidden;display:grid;place-items:center;font-family:var(--serif);font-size:1.2rem;color:var(--rose-dark)}.flower-thumb img{width:100%;height:100%;object-fit:cover}.builder-flower h3{font-family:var(--serif);font-size:1rem;font-weight:500}.builder-flower p,.builder-flower small{display:block;color:var(--muted);font-size:.66rem;margin-top:3px}.builder-flower small{color:var(--rose-dark);font-weight:700}.builder-flower>button{width:30px;height:30px;border-radius:50%;background:var(--ink);color:#fff;font-size:1.25rem;line-height:1}.builder-canvas{padding:27px 24px 18px;min-height:650px}.canvas-heading{text-align:center}.bouquet-preview{height:450px;max-width:620px;margin:13px auto 0;position:relative;overflow:hidden;border-radius:28px;background:radial-gradient(circle at 50% 36%,#fff 0%,#fae8ec 44%,#f2d4dc 100%)}.bouquet-preview:before{content:"";position:absolute;width:96%;height:72%;bottom:-29%;left:2%;background:#c77786;clip-path:polygon(7% 0,93% 0,76% 100%,24% 100%);opacity:.9}.bouquet-wrap{position:absolute;width:65%;height:43%;bottom:-16%;left:17.5%;background:linear-gradient(120deg,#d69c67,#f0d19e);clip-path:polygon(0 0,100% 0,67% 100%,33% 100%);z-index:1}.bouquet-slot{position:absolute;width:72px;height:72px;border-radius:50%;border:2px dashed rgba(120,65,80,.36);background:rgba(255,255,255,.42);display:grid;place-items:center;z-index:3;transition:.2s}.bouquet-slot:hover:not(:disabled),.bouquet-slot.is-selected{transform:scale(1.1);border-color:var(--rose-dark);box-shadow:0 0 0 5px rgba(184,91,115,.18)}.bouquet-slot.is-selected{border-style:solid}.bouquet-slot.is-filled{border:3px solid #fff;box-shadow:0 8px 18px rgba(63,28,36,.23);overflow:visible}.bouquet-slot img{width:100%;height:100%;object-fit:cover;border-radius:50%}.slot-fallback{font-family:var(--serif);font-size:1.45rem;color:var(--rose-dark)}.empty-dot{width:8px;height:8px;border-radius:50%;background:rgba(134,63,82,.35)}.bouquet-slot i{position:absolute;bottom:-18px;font-style:normal;font-size:.55rem;font-weight:700;color:var(--rose-dark);opacity:.8}.slot-1{left:calc(50% - 36px);top:57px}.slot-2{left:calc(50% - 125px);top:87px}.slot-3{left:calc(50% + 53px);top:87px}.slot-4{left:calc(50% - 194px);top:151px}.slot-5{left:calc(50% - 36px);top:152px}.slot-6{left:calc(50% + 122px);top:151px}.slot-7{left:calc(50% - 144px);top:225px}.slot-8{left:calc(50% + 72px);top:225px}.slot-9{left:calc(50% - 72px);top:254px}.slot-10{left:calc(50% + 1px);top:254px}.slot-11{left:calc(50% - 238px);top:236px}.slot-12{left:calc(50% + 166px);top:236px}.slot-13{left:calc(50% - 198px);top:301px}.slot-14{left:calc(50% + 126px);top:301px}.slot-15{left:calc(50% - 36px);top:335px}.theme-red{filter:hue-rotate(-18deg)}.theme-blue{filter:hue-rotate(115deg)}.theme-purple{filter:hue-rotate(45deg)}.theme-white{filter:saturate(.48) brightness(1.08)}.canvas-actions{display:flex;justify-content:center;gap:20px;align-items:center;margin-top:16px}.builder-summary label{display:block;font-size:.62rem;letter-spacing:.11em;font-weight:800;margin:17px 0 0}.builder-summary label small{font-weight:400;letter-spacing:0;text-transform:none;color:var(--muted)}.builder-summary select,.builder-summary textarea{width:100%;margin-top:6px;padding:10px;border:1px solid var(--line);border-radius:7px;background:#fff9fa;color:var(--ink);font:inherit;font-size:.78rem}.builder-summary textarea{height:72px;resize:vertical}.price-card{margin-top:22px;padding:17px;background:var(--pink-light);border:1px solid var(--line);border-radius:10px}.price-card>div{display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted);padding:5px 0}.price-card .price-total{border-top:1px solid var(--line);margin-top:8px;padding-top:11px;color:var(--ink);font-family:var(--serif);font-size:1.28rem}.builder-future{width:100%;margin-top:17px}.builder-future:disabled{background:#827579;color:#fff;opacity:.62}
+.ai-guide{margin-top:24px;padding:16px;background:linear-gradient(145deg,#fff2f5,#fffafb);border:1px solid #ead3d9;border-radius:10px}.ai-guide h3{font-family:var(--serif);font-size:1.24rem;font-weight:500;margin:5px 0}.ai-guide>p:not(.eyebrow){font-size:.71rem;line-height:1.5;color:var(--muted);margin-bottom:10px}.ai-guide input{width:100%;margin:5px 0;padding:9px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;font-size:.73rem;color:#24191c !important;-webkit-text-fill-color:#24191c}.ai-guide input::placeholder{color:#766568;opacity:1}.ai-guide input:-webkit-autofill{-webkit-text-fill-color:#24191c;box-shadow:0 0 0 1000px #fff inset}.ai-request-button{width:100%;margin-top:8px;border-color:var(--rose-dark);color:var(--rose-dark)}.ai-recommendation{margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}.ai-recommendation h4{font-family:var(--serif);font-size:1.15rem;font-weight:500;margin:7px 0 4px}.ai-recommendation p,.ai-recommendation li{font-size:.7rem;line-height:1.45;color:var(--muted)}.ai-recommendation ul{margin:9px 0 8px;padding-left:17px}.ai-recommendation>strong{display:block;font-family:var(--serif);font-size:1.22rem;margin-bottom:10px}.ai-recommendation .builder-primary{width:100%;padding:11px;font-size:.67rem}.ai-source{display:inline-block;padding:4px 6px;border-radius:99px;background:#e9d9dd;color:#795661;text-transform:uppercase;letter-spacing:.08em;font-size:.56rem;font-weight:800}.ai-source.is-gemini{background:#dfefe5;color:#3f7051}
+@media (max-width:1050px){.builder-layout{grid-template-columns:1fr 1fr}.builder-canvas{grid-column:span 2;order:-1}.builder-header{grid-template-columns:1fr 2fr}.builder-progress{display:none}}@media (max-width:680px){.bouquet-builder,.builder-start,.builder-state{padding:24px 14px 45px}.builder-size-picker,.builder-layout{grid-template-columns:1fr}.builder-header{grid-template-columns:1fr}.builder-header>div{text-align:center}.builder-back{align-self:center}.builder-canvas{grid-column:auto;padding:18px 10px;min-height:auto}.bouquet-preview{height:395px;border-radius:18px}.bouquet-slot{width:54px;height:54px}.slot-1{left:calc(50% - 27px);top:44px}.slot-2{left:calc(50% - 94px);top:70px}.slot-3{left:calc(50% + 40px);top:70px}.slot-4{left:calc(50% - 139px);top:126px}.slot-5{left:calc(50% - 27px);top:128px}.slot-6{left:calc(50% + 85px);top:126px}.slot-7{left:calc(50% - 107px);top:190px}.slot-8{left:calc(50% + 53px);top:190px}.slot-9{left:calc(50% - 55px);top:215px}.slot-10{left:calc(50% + 1px);top:215px}.slot-11{left:calc(50% - 154px);top:204px}.slot-12{left:calc(50% + 100px);top:204px}.slot-13{left:calc(50% - 132px);top:263px}.slot-14{left:calc(50% + 78px);top:263px}.slot-15{left:calc(50% - 27px);top:292px}.canvas-actions{gap:10px;flex-wrap:wrap}.builder-header h1{font-size:2.6rem}}
+
+/* The guide belongs to the flower-picking flow, directly below the catalog. */
+.builder-catalog-stack { display: grid; gap: 20px; }
+.builder-catalog-stack .ai-guide { margin-top: 0; }
+
+/* Give the fixed slots a more floral, layered bouquet presentation. */
+.bouquet-preview {
+  background:
+    radial-gradient(ellipse at 50% 75%, rgba(90, 127, 78, .28) 0 10%, transparent 10.5%),
+    radial-gradient(ellipse at 33% 72%, rgba(120, 154, 92, .22) 0 8%, transparent 8.5%),
+    radial-gradient(ellipse at 67% 72%, rgba(120, 154, 92, .22) 0 8%, transparent 8.5%),
+    radial-gradient(circle at 50% 32%, #fffdfc 0%, #fae8ec 48%, #efd0d9 100%);
+}
+
+.bouquet-preview::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  width: 78%;
+  height: 45%;
+  bottom: 10%;
+  left: 11%;
+  opacity: .55;
+  background:
+    radial-gradient(ellipse at 10% 70%, #6f925f 0 8%, transparent 8.5%),
+    radial-gradient(ellipse at 27% 42%, #7c9d69 0 9%, transparent 9.5%),
+    radial-gradient(ellipse at 50% 68%, #668957 0 9%, transparent 9.5%),
+    radial-gradient(ellipse at 72% 42%, #7c9d69 0 9%, transparent 9.5%),
+    radial-gradient(ellipse at 90% 70%, #6f925f 0 8%, transparent 8.5%);
+  pointer-events: none;
+}
+
+.bouquet-slot.is-filled {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The fixed slots remain available, but empty positions appear only while moving a selected flower. */
+.bouquet-slot.is-hidden-empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.bouquet-slot.is-filled img.slot-illustration {
+  width: var(--bloom-size, 145%);
+  height: var(--bloom-size, 145%);
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 7px rgba(72, 38, 43, .22));
+}
+
+.bouquet-slot.is-filled img.slot-product-image {
+  border: 3px solid #fff;
+  box-shadow: 0 8px 18px rgba(63, 28, 36, .23);
+}
+
+.bouquet-slot.is-filled.is-selected {
+  border: 2px solid var(--rose-dark);
+  background: rgba(255, 255, 255, .45);
+  box-shadow: 0 0 0 5px rgba(184, 91, 115, .18);
+}
+
+.bouquet-slot.is-filled i { z-index: 4; }
+
+/* A bouquet template is the visual container; slots remain the interactive layer. */
+.bouquet-preview {
+  overflow: hidden;
+  background: linear-gradient(180deg, #fffdfc 0%, #f8e5e9 100%);
+}
+
+.bouquet-preview::before,
+.bouquet-preview::after,
+.bouquet-wrap {
+  display: none;
+}
+
+.bouquet-template {
+  position: absolute;
+  z-index: 1;
+  width: min(88%, 430px);
+  height: 98%;
+  left: 50%;
+  bottom: -7%;
+  object-fit: contain;
+  transform: translateX(-50%);
+  pointer-events: none;
+  user-select: none;
+}
+
+.bouquet-slot {
+  left: var(--slot-x);
+  top: var(--slot-y);
+  z-index: 3;
+  transform: translate(-50%, -50%);
+}
+
+.bouquet-slot:hover:not(:disabled),
+.bouquet-slot.is-selected {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.bouquet-slot.is-filled {
+  z-index: 4;
+}
+
+.bouquet-slot.is-filled img.slot-illustration {
+  width: 138%;
+  height: 138%;
+}
+
+.bouquet-slot i {
+  z-index: 5;
+}
+
+@media (max-width: 680px) {
+  .bouquet-template {
+    width: 96%;
+    height: 94%;
+    bottom: -5%;
+  }
+}
+
+/* Presentation metadata keeps the fixed slots interactive while giving blooms depth. */
+.bouquet-slot {
+  z-index: var(--slot-layer);
+}
+
+.bouquet-slot.is-filled img.slot-illustration,
+.bouquet-slot.is-filled img.slot-product-image {
+  transform: rotate(var(--flower-rotation)) scale(var(--flower-scale));
+  transform-origin: 50% 72%;
+  transition: transform .2s ease, filter .2s ease;
+}
+
+.bouquet-slot.is-filled img.slot-illustration {
+  width: 145%;
+  height: 145%;
+  transform-origin: 50% 50%;
+}
+
+.bouquet-template-front {
+  z-index: 5;
+  clip-path: inset(52% 0 0 0);
+}
+
+.bouquet-ribbon {
+  position: absolute;
+  z-index: 7;
+  width: min(55%, 267px);
+  height: 62%;
+  left: 50%;
+  bottom: -3%;
+  object-fit: contain;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.bouquet-greeting-card {
+  position: absolute;
+  z-index: 4;
+  width: min(21%, 118px);
+  right: 11%;
+  top: 15%;
+  transform: rotate(8deg);
+  transform-origin: center;
+  filter: drop-shadow(0 5px 5px rgba(57, 36, 39, .24));
+  pointer-events: none;
+}
+
+/* Clear visual choices for the second tap in the fixed-slot interaction. */
+.bouquet-slot.is-move-target {
+  border: 2px dashed #547862;
+  background: rgba(239, 249, 238, .76);
+  box-shadow: 0 0 0 4px rgba(84, 120, 98, .14);
+  animation: destination-pulse 1.35s ease-in-out infinite;
+}
+
+.bouquet-slot.is-swap-target {
+  border: 2px solid var(--rose-dark);
+  background: rgba(255, 247, 249, .36);
+  box-shadow: 0 0 0 4px rgba(184, 91, 115, .14);
+}
+
+/* Filled flowers are already recognizable swap targets; avoid circular frames behind blooms. */
+.bouquet-slot.is-filled.is-swap-target {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The selection marker follows the transformed bloom instead of the base slot. */
+.bouquet-slot.is-filled.is-selected {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bouquet-slot.is-filled.is-selected img {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 0 4px rgba(125, 42, 64, .68)) drop-shadow(0 0 9px rgba(218, 137, 157, .62));
+}
+
+/* Make each bloom clearly feel selectable before it is clicked. */
+.bouquet-slot.is-filled { cursor: pointer; }
+
+.bouquet-slot.is-filled:hover:not(.is-selected) img {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 6px 7px rgba(72, 38, 43, .26)) drop-shadow(0 0 6px rgba(184, 91, 115, .38));
+  transform: rotate(var(--flower-rotation)) scale(calc(var(--flower-scale) * 1.07));
+}
+
+/* Hover ring matches the bloom's own position, scale, and rotation. */
+.bouquet-slot.is-filled:hover:not(.is-selected) {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bouquet-slot.is-filled:hover:not(.is-selected)::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: 50%;
+  width: var(--bloom-size, 145%);
+  height: var(--bloom-size, 145%);
+  border: 2px solid var(--rose-dark);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(218, 137, 157, .3);
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(var(--flower-rotation)) scale(calc(var(--flower-scale) * 1.07));
+  transform-origin: 50% 50%;
+}
+
+/* One transformed wrapper keeps the bloom and its hover ring perfectly aligned. */
+.bouquet-slot.is-filled:hover:not(.is-selected)::before {
+  content: none;
+}
+
+.flower-visual {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  width: var(--bloom-size, 145%);
+  height: var(--bloom-size, 145%);
+  transform: translate(-50%, -50%) rotate(var(--flower-rotation)) scale(var(--flower-scale));
+  transform-origin: 50% 50%;
+  transition: transform .2s ease, filter .2s ease;
+}
+
+.flower-visual img.slot-illustration,
+.flower-visual img.slot-product-image {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  object-fit: contain;
+  filter: none !important;
+  transform: none !important;
+}
+
+.flower-hover-ring {
+  position: absolute;
+  z-index: 0;
+  inset: -5%;
+  border: 2px solid var(--rose-dark);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(218, 137, 157, .3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease;
+}
+
+.bouquet-slot.is-filled:hover:not(.is-selected) .flower-visual {
+  transform: translate(-50%, -50%) rotate(var(--flower-rotation)) scale(calc(var(--flower-scale) * 1.07));
+  filter: drop-shadow(0 6px 7px rgba(72, 38, 43, .26));
+}
+
+.bouquet-slot.is-filled:hover:not(.is-selected) .flower-hover-ring {
+  opacity: 1;
+}
+
+.bouquet-slot.is-filled.is-selected .flower-visual {
+  filter: drop-shadow(0 0 4px rgba(125, 42, 64, .68)) drop-shadow(0 0 9px rgba(218, 137, 157, .62));
+}
+
+/* Theme-specific template artwork already supplies its intended colour.
+   Never recolour the full preview: hue rotation turns red pink and blue green. */
+.bouquet-preview.theme-red,
+.bouquet-preview.theme-blue,
+.bouquet-preview.theme-purple,
+.bouquet-preview.theme-white {
+  filter: none !important;
+}
+
+.arrangement-status {
+  max-width: 620px;
+  margin: 15px auto 0;
+  padding: 10px 13px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: .76rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.arrangement-status.is-active {
+  border-color: var(--rose);
+  background: #fff7f8;
+  color: var(--rose-dark);
+  font-weight: 600;
+}
+
+@keyframes destination-pulse {
+  50% { box-shadow: 0 0 0 7px rgba(84, 120, 98, .05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bouquet-slot.is-move-target { animation: none; }
+}
+
+/* Bloom-only illustrations rotate and scale from their visual centre. */
+.bouquet-slot.is-filled img.slot-illustration {
+  transform-origin: 50% 50%;
+}
+
+/* Controlled, touch-friendly visual editing for the selected flower only. */
+.flower-adjustments {
+  max-width: 620px;
+  margin: 13px auto 0;
+  padding: 14px;
+  border: 1px solid #e6cfd5;
+  border-radius: 10px;
+  background: rgba(255, 249, 250, .86);
+}
+
+.flower-adjustments-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.flower-adjustments-heading .eyebrow { margin: 0; }
+.flower-adjustments-heading strong { font-family: var(--serif); font-size: 1.05rem; font-weight: 500; }
+
+.flower-adjustment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.adjustment-group {
+  min-width: 0;
+  padding: 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  text-align: center;
+}
+
+.adjustment-group > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: .58rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.adjustment-group > div { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.adjustment-group output { min-width: 38px; color: var(--ink); font-size: .75rem; font-weight: 700; }
+
+.adjustment-button {
+  display: inline-grid;
+  width: 30px;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.adjustment-button:hover:not(:disabled) { background: var(--ink); color: #fff; }
+.adjustment-button.adjustment-text { width: auto; padding: 0 8px; font-size: .63rem; }
+.nudge-controls { display: grid !important; grid-template-columns: repeat(4, 30px); }
+.reset-flower-appearance { display: block; margin: 12px auto 0; }
+
+@media (max-width: 680px) {
+  .flower-adjustment-grid { grid-template-columns: 1fr; }
+}
