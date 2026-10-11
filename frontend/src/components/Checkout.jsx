@@ -451,51 +451,8 @@ function Checkout({ user, onBack, onContinue }) {
     return () => {
       if (gatewayPollTimer) clearInterval(gatewayPollTimer);
     };
-  }, [gatewayPollTimer]);
-    const token = sessionStorage.getItem("token");
-
-    if (!token || !paymentInfo?.payment_id) {
-      setGatewayMessage("Payment details are unavailable. Please try checkout again.");
-      return;
-    }
-
-    try {
-      setPaymentProcessing(true);
-      setGatewayMessage("");
-
-      const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/verify`,
-        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setGatewayInProgress(false);
-        setGatewayMessage(data.message || "Could not verify the payment.");
-        return;
-      }
-
-      if (data.payment_status === "successful") {
-        setPaymentResult(data);
-        onContinue({ ...checkoutData, paymentResult: data });
-        return;
-      }
-
-      setPaymentInfo((currentPayment) => ({ ...currentPayment, ...data }));
-      setGatewayInProgress(false);
-      setGatewayMessage(
-        data.message ||
-        "Payment was interrupted or not completed. You can retry below."
-      );
-    } catch (error) {
-      console.error("Gateway verification error:", error);
-      setGatewayInProgress(false);
-      setGatewayMessage("Cannot connect to the server while verifying payment.");
-    } finally {
-      setPaymentProcessing(false);
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (loading) {
     return (
