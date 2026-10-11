@@ -110,14 +110,6 @@ function CustomerDashboard({ onLogout }) {
           onCheckout={() => setCurrentPage("checkout")}
         />
       );
-    } else if (currentPage === "bouquet") {
-      content = (
-        <BouquetBuilder
-          onBack={() => setCurrentPage("home")}
-          onAddedToCart={refreshCartCount}
-          onCheckout={() => setCurrentPage("checkout")}
-        />
-      );
     content = (
       <Catalog
         onBack={() => setCurrentPage("home")}
