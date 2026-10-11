@@ -135,6 +135,7 @@ function CustomerDashboard({ onLogout }) {
   } else if (currentPage === "checkout") {
     content = (
       <Checkout
+        user={user}
         onBack={() => setCurrentPage("cart")}
         onContinue={(data) => {
           console.log("Checkout completed:", data);

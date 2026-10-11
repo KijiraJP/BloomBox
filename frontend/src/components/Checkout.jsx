@@ -12,12 +12,12 @@ const nowLocal = () => {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
-function Checkout({ onBack, onContinue }) {
+function Checkout({ user, onBack, onContinue }) {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState((user && user.email) || "");
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [mobileNumber, setMobileNumber] = useState("");
 
@@ -814,7 +814,7 @@ function Checkout({ onBack, onContinue }) {
                 </div>
                 <div className="checkout-summary-row">
                   <span>Payment method</span>
-                  <strong>{paymentInfo.payment_method.replace("_", " ")}</strong>
+                  <strong>{paymentInfo.payment_method === "cod" ? "Cash on Delivery" : "E-Wallets / Cards"}</strong>
                 </div>
                 <div className="checkout-summary-row">
                   <span>Amount</span>
@@ -1261,45 +1261,8 @@ function Checkout({ onBack, onContinue }) {
                   />
 
                   <span>
-                    GCash
-                  </span>
-
-                </label>
-
-
-                <label className="checkout-payment-option">
-
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="maya"
-                    checked={paymentMethod === "maya"}
-                    onChange={(event) =>
-                      setPaymentMethod(event.target.value)
-                    }
-                  />
-
-                  <span>
-                    Maya
-                  </span>
-
-                </label>
-
-
-                <label className="checkout-payment-option">
-
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="credit_card"
-                    checked={paymentMethod === "credit_card"}
-                    onChange={(event) =>
-                      setPaymentMethod(event.target.value)
-                    }
-                  />
-
-                  <span>
-                    Credit / Debit Card
+                    E-Wallets / Cards
+                    <small>GCash · Maya · Credit / Debit card</small>
                   </span>
 
                 </label>
@@ -1319,6 +1282,7 @@ function Checkout({ onBack, onContinue }) {
 
                   <span>
                     Cash on Delivery
+                    <small>Pay when your flowers arrive</small>
                   </span>
 
                 </label>
