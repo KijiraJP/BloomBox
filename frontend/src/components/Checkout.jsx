@@ -520,7 +520,7 @@ function Checkout({ user, onBack, onContinue }) {
                   className="btn btn-dark checkout-continue-button"
                   onClick={onBack}
                 >
-                  Continue Shopping
+                  Return to Home
                 </button>
               </section>
             </div>
@@ -639,6 +639,21 @@ function Checkout({ user, onBack, onContinue }) {
 
   if (paymentInfo) {
     const invoiceReady = Boolean(paymentInfo.gateway_invoice_id);
+    const isPaid = ["successful", "paid", "settled", "succeeded"].includes(
+      (paymentInfo.payment_status || "").toLowerCase()
+    ) || ["paid", "settled", "succeeded"].includes(
+      (paymentInfo.gateway_status || "").toLowerCase()
+    );
+
+    if (isPaid && !paymentResult) {
+      // Promote to success screen to match flow
+      setPaymentResult({
+        order_id: paymentInfo.order_id,
+        payment_status: paymentInfo.payment_status || "successful",
+        order_status: paymentInfo.order_status || "processing",
+        transaction_reference: paymentInfo.transaction_reference || paymentInfo.gateway_invoice_id || ""
+      });
+    }
 
     return (
       <div className="checkout-page">
@@ -678,7 +693,31 @@ function Checkout({ user, onBack, onContinue }) {
                   </strong>
                 </div>
 
-                {!invoiceReady ? (
+                {isPaid ? (
+                  <>
+                    <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
+                      Payment completed.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-dark checkout-continue-button"
+                      onClick={() =>
+                        onContinue({
+                          ...checkoutData,
+                          paymentResult: {
+                            order_id: paymentInfo.order_id,
+                            payment_status: paymentInfo.payment_status || "successful",
+                            order_status: paymentInfo.order_status || "processing",
+                            transaction_reference:
+                              paymentInfo.transaction_reference || paymentInfo.gateway_invoice_id || ""
+                          }
+                        })
+                      }
+                    >
+                      Continue
+                    </button>
+                  </>
+                ) : !invoiceReady ? (
                   <button
                     type="button"
                     className="btn btn-dark checkout-continue-button"
