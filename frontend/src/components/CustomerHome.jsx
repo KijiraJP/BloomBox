@@ -65,7 +65,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
             >
             Cart{cartCount > 0 ? ` (${cartCount})` : ""}
             </button>
-          <a onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#">Create Your Bouquet</a>
+          <a onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();} else if(typeof onNavigate==="function"){onNavigate("bouquet");}}} href="#">Create Your Bouquet</a>
           <a href="#delivery">Delivery</a>
         </div>
 
@@ -120,7 +120,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
               </button>
 
               <a
-                onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#"
+                onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();} else if(typeof onNavigate==="function"){onNavigate("bouquet");}}} href="#"
                 className="btn btn-outline"
               >
                 Create Your Bouquet
@@ -344,7 +344,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
             </p>
 
             <a
-              onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#"
+              onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();} else if(typeof onNavigate==="function"){onNavigate("bouquet");}}} href="#"
               className="btn btn-primary"
             >
               Create Your Bouquet
@@ -501,7 +501,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
             >
             Shop
             </button>
-          <a onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#">Create a Bouquet</a>
+          <a onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();} else if(typeof onNavigate==="function"){onNavigate("bouquet");}}} href="#">Create a Bouquet</a>
           <a href="#delivery">Delivery</a>
         </div>
 
