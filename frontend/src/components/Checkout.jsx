@@ -474,11 +474,40 @@ function Checkout({ user, onBack, onContinue }) {
   };
 
   useEffect(() => {
-    return () => {
-      if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+    const handleVisibilityChange = () => {
+      if (!gatewayInProgress) return;
+      if (document.visibilityState === "visible") {
+        const token = sessionStorage.getItem("token");
+        if (!token || !paymentInfo?.payment_id) return;
+        fetch(`http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/verify`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.payment_status === "successful") {
+              setPaymentResult(d);
+              onContinue({ ...checkoutData, paymentResult: d });
+              if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+              setGatewayPollTimer(null);
+              return;
+            }
+            if (d.payment_status === "pending" || d.gateway_status === "REQUIRES_ACTION") {
+              setGatewayInProgress(false);
+              setGatewayInterrupted(true);
+              if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+              setGatewayPollTimer(null);
+            }
+          })
+          .catch(() => {});
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [gatewayInProgress, paymentInfo, checkoutData, onContinue, gatewayPollTimer]);
+
 
   if (loading) {
     return (
