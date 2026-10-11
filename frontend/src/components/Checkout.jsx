@@ -422,7 +422,7 @@ function Checkout({ user, onBack, onContinue }) {
     }
 
     let tries = 0;
-    const maxTries = 150; // ~5 min if 2s
+    const maxTries = 30; // ~60s if 2s to detect closed tab faster for testing
     const timer = setInterval(async () => {
       const token = sessionStorage.getItem("token");
       if (!token || !paymentInfo?.payment_id) return;
