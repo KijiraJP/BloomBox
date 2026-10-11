@@ -7,7 +7,6 @@ import Cart from "./Cart";
 import Checkout from "./Checkout";
 import CustomerProfile from "./CustomerProfile";
 import NotificationBell from "./NotificationBell";
-import BouquetBuilder from "./BouquetBuilder";
 
 function CustomerDashboard({ onLogout }) {
   const [user, setUser] = useState(null);
@@ -102,14 +101,6 @@ function CustomerDashboard({ onLogout }) {
       </div>
     );
   } else if (currentPage === "catalog") {
-    } else if (currentPage === "bouquet") {
-      content = (
-        <BouquetBuilder
-          onBack={() => setCurrentPage("home")}
-          onAddedToCart={refreshCartCount}
-          onCheckout={() => setCurrentPage("checkout")}
-        />
-      );
     content = (
       <Catalog
         onBack={() => setCurrentPage("home")}
