@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "../bloombox.css";
 import "./checkout.css";
 
@@ -35,8 +35,10 @@ function Checkout({ user, onBack, onContinue }) {
   const [paymentResult, setPaymentResult] = useState(null);
   const [gatewayMessage, setGatewayMessage] = useState("");
   const [gatewayInProgress, setGatewayInProgress] = useState(false);
+  const [gatewayInterrupted, setGatewayInterrupted] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(300); // 5 min
-  const [timeoutTimer, setTimeoutTimer] = useState(null);
+  const gatewayPollRef = useRef(null);
+  const timeoutTimerRef = useRef(null);
 
   // Tracks what has already been created so a retry after a mid-checkout
   // failure can never create a duplicate address, order, or delivery.
@@ -404,7 +406,6 @@ function Checkout({ user, onBack, onContinue }) {
       setGatewayInProgress(true);
       setGatewayInterrupted(false);
       setGatewayMessage("");
-      if (gatewayPollTimer) clearInterval(gatewayPollTimer);
       startPollGateway();
     } catch (error) {
       console.error("Gateway payment error:", error);
@@ -416,18 +417,25 @@ function Checkout({ user, onBack, onContinue }) {
     }
   };
 
+  const stopGatewayTimers = () => {
+    if (gatewayPollRef.current) {
+      clearInterval(gatewayPollRef.current);
+      gatewayPollRef.current = null;
+    }
+    if (timeoutTimerRef.current) {
+      clearInterval(timeoutTimerRef.current);
+      timeoutTimerRef.current = null;
+    }
+  };
+
   const startPollGateway = () => {
-    if (gatewayPollTimer) {
-      clearInterval(gatewayPollTimer);
-    }
-    if (timeoutTimer) {
-      clearInterval(timeoutTimer);
-    }
+    stopGatewayTimers();
 
     let tries = 0;
     const maxTries = 150; // 5 minutes at 2s
     setTimeoutSeconds(300);
-    const timer = setInterval(async () => {
+
+    gatewayPollRef.current = setInterval(async () => {
       const token = sessionStorage.getItem("token");
       if (!token || !paymentInfo?.payment_id) return;
 
@@ -438,69 +446,40 @@ function Checkout({ user, onBack, onContinue }) {
           { method: "POST", headers: { Authorization: `Bearer ${token}` } }
         );
         const data = await response.json();
-        if (!response.ok) {
-          if (tries > maxTries) {
-            setGatewayInProgress(false);
-            setGatewayInterrupted(true);
-            clearInterval(timer);
-            setGatewayPollTimer(null);
-            if (timeoutTimer) clearInterval(timeoutTimer);
-            setTimeoutTimer(null);
-          }
-          return;
-        }
 
-        if (data.payment_status === "successful") {
-          clearInterval(timer);
-          setGatewayPollTimer(null);
-          if (timeoutTimer) clearInterval(timeoutTimer);
-          setTimeoutTimer(null);
+        if (response.ok && data.payment_status === "successful") {
+          stopGatewayTimers();
           setPaymentResult(data);
           onContinue({ ...checkoutData, paymentResult: data });
           return;
         }
 
-        setPaymentInfo((current) => ({ ...current, ...data }));
+        if (response.ok) {
+          setPaymentInfo((current) => ({ ...current, ...data }));
+        }
 
         if (tries > maxTries) {
+          stopGatewayTimers();
           setGatewayInProgress(false);
           setGatewayInterrupted(true);
-          clearInterval(timer);
-          setGatewayPollTimer(null);
-          if (timeoutTimer) clearInterval(timeoutTimer);
-          setTimeoutTimer(null);
         }
       } catch (error) {
         if (tries > maxTries) {
+          stopGatewayTimers();
           setGatewayInProgress(false);
           setGatewayInterrupted(true);
-          clearInterval(timer);
-          setGatewayPollTimer(null);
-          if (timeoutTimer) clearInterval(timeoutTimer);
-          setTimeoutTimer(null);
         }
       }
     }, 2000);
 
-    const t = setInterval(() => {
-      setTimeoutSeconds((s) => {
-        if (s <= 1) {
-          clearInterval(t);
-          setTimeoutTimer(null);
-          return 0;
-        }
-        return s - 1;
-      });
+    timeoutTimerRef.current = setInterval(() => {
+      setTimeoutSeconds((s) => (s <= 1 ? 0 : s - 1));
     }, 1000);
-
-    setGatewayPollTimer(timer);
-    setTimeoutTimer(t);
   };
 
   useEffect(() => {
     return () => {
-      if (gatewayPollTimer) clearInterval(gatewayPollTimer);
-      if (timeoutTimer) clearInterval(timeoutTimer);
+      stopGatewayTimers();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
