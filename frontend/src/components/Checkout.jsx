@@ -404,9 +404,12 @@ function Checkout({ user, onBack, onContinue }) {
       setGatewayInProgress(true);
       setGatewayInterrupted(false);
       setGatewayMessage("");
+      if (gatewayPollTimer) clearInterval(gatewayPollTimer);
       startPollGateway();
     } catch (error) {
       console.error("Gateway payment error:", error);
+      setGatewayInProgress(false);
+      setGatewayInterrupted(true);
       setGatewayMessage("Cannot connect to the server while starting payment.");
     } finally {
       setPaymentProcessing(false);
@@ -418,20 +421,31 @@ function Checkout({ user, onBack, onContinue }) {
       clearInterval(gatewayPollTimer);
     }
 
+    let tries = 0;
+    const maxTries = 150; // ~5 min if 2s
     const timer = setInterval(async () => {
       const token = sessionStorage.getItem("token");
       if (!token || !paymentInfo?.payment_id) return;
 
+      tries++;
       try {
         const response = await fetch(
           `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/verify`,
           { method: "POST", headers: { Authorization: `Bearer ${token}` } }
         );
         const data = await response.json();
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (tries > maxTries) {
+            setGatewayInProgress(false);
+            setGatewayInterrupted(true);
+            clearInterval(timer);
+            setGatewayPollTimer(null);
+          }
+          return;
+        }
 
         if (data.payment_status === "successful") {
-          if (gatewayPollTimer) clearInterval(gatewayPollTimer);
+          clearInterval(timer);
           setGatewayPollTimer(null);
           setPaymentResult(data);
           onContinue({ ...checkoutData, paymentResult: data });
@@ -439,8 +453,20 @@ function Checkout({ user, onBack, onContinue }) {
         }
 
         setPaymentInfo((current) => ({ ...current, ...data }));
+
+        if (tries > maxTries) {
+          setGatewayInProgress(false);
+          setGatewayInterrupted(true);
+          clearInterval(timer);
+          setGatewayPollTimer(null);
+        }
       } catch (error) {
-        // ignore
+        if (tries > maxTries) {
+          setGatewayInProgress(false);
+          setGatewayInterrupted(true);
+          clearInterval(timer);
+          setGatewayPollTimer(null);
+        }
       }
     }, 2000);
 
@@ -705,9 +731,6 @@ function Checkout({ user, onBack, onContinue }) {
                 {isPaid ? (
                   <>
                     <h2>Payment Completed</h2>
-                    <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
-                      Payment completed.
-                    </p>
                     <button
                       type="button"
                       className="btn btn-dark checkout-continue-button"
@@ -730,11 +753,8 @@ function Checkout({ user, onBack, onContinue }) {
                 ) : gatewayInProgress ? (
                   <>
                     <h2>Processing Payment...</h2>
-                    <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
-                      Please complete the checkout in the Xendit window.
-                    </p>
                   </>
-                ) : gatewayInterrupted || invoiceReady ? (
+                ) : gatewayInterrupted ? (
                   <>
                     <h2>Payment Interrupted</h2>
                     <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
