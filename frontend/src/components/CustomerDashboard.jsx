@@ -105,9 +105,17 @@ function CustomerDashboard({ onLogout }) {
     } else if (currentPage === "bouquet") {
       content = (
         <BouquetBuilder
-          onBack={() => setCurrentPage("home") }
+          onBack={() => setCurrentPage("home")}
           onAddedToCart={refreshCartCount}
-          onCheckout={() => setCurrentPage("checkout") }
+          onCheckout={() => setCurrentPage("checkout")}
+        />
+      );
+    } else if (currentPage === "bouquet") {
+      content = (
+        <BouquetBuilder
+          onBack={() => setCurrentPage("home")}
+          onAddedToCart={refreshCartCount}
+          onCheckout={() => setCurrentPage("checkout")}
         />
       );
     content = (

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import "../bloombox.css";
 
-function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSelect }) {
+function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSelect, onCreateBouquet }) {
   const [featuredProducts, setFeaturedProducts] = useState([]);
 
   // Live products for the "Best-loved blooms" section
@@ -65,7 +65,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
             >
             Cart{cartCount > 0 ? ` (${cartCount})` : ""}
             </button>
-          <a href="#bouquet">Create Your Bouquet</a>
+          <a onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#">Create Your Bouquet</a>
           <a href="#delivery">Delivery</a>
         </div>
 
@@ -120,7 +120,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
               </button>
 
               <a
-                href="#bouquet"
+                onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#"
                 className="btn btn-outline"
               >
                 Create Your Bouquet
@@ -196,7 +196,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
               className="text-link"
               onClick={() => onNavigate("catalog")}
             >
-              Explore our collection →
+              Explore our collection â†’
             </button>
 
           </div>
@@ -309,7 +309,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
                 <div className="product-info">
                   <h3>{product.product_name}</h3>
                   <p>{product.description || product.category}</p>
-                  <strong>₱{formatPrice(product.price)}</strong>
+                  <strong>â‚±{formatPrice(product.price)}</strong>
                 </div>
               </article>
             ))}
@@ -344,7 +344,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
             </p>
 
             <a
-              href="#bouquet"
+              onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#"
               className="btn btn-primary"
             >
               Create Your Bouquet
@@ -400,9 +400,9 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
           <div className="review-card">
 
             <p className="review-text">
-              “The flowers were beautiful and arrived exactly
+              â€œThe flowers were beautiful and arrived exactly
               when I needed them. The whole experience was
-              effortless.”
+              effortless.â€
             </p>
 
             <strong>
@@ -501,7 +501,7 @@ function CustomerHome({ user, cartCount = 0, onLogout, onNavigate, onProductSele
             >
             Shop
             </button>
-          <a href="#bouquet">Create a Bouquet</a>
+          <a onClick={(e)=>{e.preventDefault();if(typeof onCreateBouquet==="function"){onCreateBouquet();}}} href="#">Create a Bouquet</a>
           <a href="#delivery">Delivery</a>
         </div>
 
