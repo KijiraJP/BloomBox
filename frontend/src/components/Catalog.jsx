@@ -6,6 +6,7 @@ import "./catalog.css";
 function Catalog({ onBack, onProductSelect }) {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedAvailability, setSelectedAvailability] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,18 +43,43 @@ function Catalog({ onBack, onProductSelect }) {
     fetchProducts();
   }, []);
 
+  // Category buttons come from the data itself so new categories
+  // added by the admin show up automatically.
+  const categories = React.useMemo(() => {
+    const unique = [...new Set(products.map((product) => product.category))];
+    return ["All", ...unique.filter(Boolean)];
+  }, [products]);
+
   // Filter products
   const filteredProducts = products.filter((product) => {
     const categoryMatches =
       selectedCategory === "All" ||
       product.category === selectedCategory;
 
+    const stockQuantity = Number(product.stock_quantity ?? 0);
     const availabilityMatches =
       selectedAvailability === "All" ||
-      product.status === "active";
+      (selectedAvailability === "In Stock" && stockQuantity > 0) ||
+      (selectedAvailability === "Out of Stock" && stockQuantity <= 0);
 
-    return categoryMatches && availabilityMatches;
+    const query = searchQuery.trim().toLowerCase();
+    const searchMatches =
+      !query ||
+      product.product_name.toLowerCase().includes(query) ||
+      (product.description || "").toLowerCase().includes(query);
+
+    return categoryMatches && availabilityMatches && searchMatches;
   });
+
+  const formatPrice = (price) => {
+    const value = Number(price);
+    const safeValue = Number.isFinite(value) ? value : 0;
+
+    return safeValue.toLocaleString("en-PH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
 
   return (
     <div className="catalog-page">
@@ -98,41 +124,20 @@ function Catalog({ onBack, onProductSelect }) {
 
             <h3>Category</h3>
 
-            <button
-              type="button"
-              className={
-                selectedCategory === "All"
-                  ? "filter-option active"
-                  : "filter-option"
-              }
-              onClick={() => setSelectedCategory("All")}
-            >
-              All Products
-            </button>
-
-            <button
-              type="button"
-              className={
-                selectedCategory === "Bouquet"
-                  ? "filter-option active"
-                  : "filter-option"
-              }
-              onClick={() => setSelectedCategory("Bouquet")}
-            >
-              Bouquets
-            </button>
-
-            <button
-              type="button"
-              className={
-                selectedCategory === "Flower"
-                  ? "filter-option active"
-                  : "filter-option"
-              }
-              onClick={() => setSelectedCategory("Flower")}
-            >
-              Flowers
-            </button>
+            {categories.map((category) => (
+              <button
+                type="button"
+                key={category}
+                className={
+                  selectedCategory === category
+                    ? "filter-option active"
+                    : "filter-option"
+                }
+                onClick={() => setSelectedCategory(category)}
+              >
+                {category === "All" ? "All Products" : category}
+              </button>
+            ))}
 
           </div>
 
@@ -140,33 +145,20 @@ function Catalog({ onBack, onProductSelect }) {
 
             <h3>Availability</h3>
 
-            <button
-              type="button"
-              className={
-                selectedAvailability === "All"
-                  ? "filter-option active"
-                  : "filter-option"
-              }
-              onClick={() =>
-                setSelectedAvailability("All")
-              }
-            >
-              All
-            </button>
-
-            <button
-              type="button"
-              className={
-                selectedAvailability === "In Stock"
-                  ? "filter-option active"
-                  : "filter-option"
-              }
-              onClick={() =>
-                setSelectedAvailability("In Stock")
-              }
-            >
-              In Stock
-            </button>
+            {["All", "In Stock", "Out of Stock"].map((option) => (
+              <button
+                type="button"
+                key={option}
+                className={
+                  selectedAvailability === option
+                    ? "filter-option active"
+                    : "filter-option"
+                }
+                onClick={() => setSelectedAvailability(option)}
+              >
+                {option}
+              </button>
+            ))}
 
           </div>
 
@@ -185,47 +177,31 @@ function Catalog({ onBack, onProductSelect }) {
               </p>
             </div>
 
+            <input
+              type="search"
+              className="catalog-search"
+              placeholder="Search flowers..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              aria-label="Search products"
+            />
+
             <div className="catalog-chips">
 
-              <button
-                type="button"
-                className={
-                  selectedCategory === "All"
-                    ? "catalog-chip active"
-                    : "catalog-chip"
-                }
-                onClick={() => setSelectedCategory("All")}
-              >
-                All
-              </button>
-
-              <button
-                type="button"
-                className={
-                  selectedCategory === "Bouquet"
-                    ? "catalog-chip active"
-                    : "catalog-chip"
-                }
-                onClick={() =>
-                  setSelectedCategory("Bouquet")
-                }
-              >
-                Bouquets
-              </button>
-
-              <button
-                type="button"
-                className={
-                  selectedCategory === "Flower"
-                    ? "catalog-chip active"
-                    : "catalog-chip"
-                }
-                onClick={() =>
-                  setSelectedCategory("Flower")
-                }
-              >
-                Flowers
-              </button>
+              {categories.map((category) => (
+                <button
+                  type="button"
+                  key={category}
+                  className={
+                    selectedCategory === category
+                      ? "catalog-chip active"
+                      : "catalog-chip"
+                  }
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category}
+                </button>
+              ))}
 
             </div>
 
@@ -291,14 +267,19 @@ function Catalog({ onBack, onProductSelect }) {
                     </h3>
 
                     <p className="catalog-product-price">
-                      ₱
-                      {Number(product.price).toLocaleString(
-                        "en-PH",
-                        {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        }
-                      )}
+                      ₱{formatPrice(product.price)}
+                    </p>
+
+                    <p
+                      className={
+                        Number(product.stock_quantity ?? 0) > 0
+                          ? "catalog-product-stock"
+                          : "catalog-product-stock out"
+                      }
+                    >
+                      {Number(product.stock_quantity ?? 0) > 0
+                        ? `${product.stock_quantity} in stock`
+                        : "Out of stock"}
                     </p>
 
                     <button
@@ -326,7 +307,7 @@ function Catalog({ onBack, onProductSelect }) {
               <div className="catalog-empty">
                 <h3>No products found.</h3>
                 <p>
-                  Try changing your filter.
+                  Try changing your filter or search.
                 </p>
               </div>
             )}

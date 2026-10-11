@@ -1,9 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import "../bloombox.css";
 import "./product.css";
 
-function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
+function ProductDetails({
+  product,
+  onBack,
+  onHome,
+  onAddToCart,
+  onGoToCart,
+  onSelectProduct,
+  cartCount = 0
+}) {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState("Medium");
   const [selectedWrap, setSelectedWrap] = useState("Kraft Paper");
@@ -13,6 +21,35 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
 
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartMessage, setCartMessage] = useState("");
+  const [relatedProducts, setRelatedProducts] = useState([]);
+
+  // Related products for the "You may also like" section
+  useEffect(() => {
+    const fetchRelated = async () => {
+      if (!product?.product_id) {
+        return;
+      }
+
+      try {
+        const response = await fetch("http://localhost:5000/api/products");
+        const data = await response.json();
+
+        if (!response.ok) {
+          return;
+        }
+
+        const related = data
+          .filter((item) => item.product_id !== product.product_id)
+          .slice(0, 3);
+
+        setRelatedProducts(related);
+      } catch (error) {
+        console.error("Related products error:", error);
+      }
+    };
+
+    fetchRelated();
+  }, [product?.product_id]);
 
   const productImages = [
   product?.product_image ||
@@ -46,8 +83,28 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
   const currentImage =
     productImages[selectedImage] || product.product_image;
 
+  const stockQuantity = Number(product.stock_quantity ?? 0);
+  const hasStockInfo = product.stock_quantity !== undefined && product.stock_quantity !== null;
+  const outOfStock = hasStockInfo && stockQuantity <= 0;
+
+  const formatPrice = (price) => {
+    const value = Number(price);
+    const safeValue = Number.isFinite(value) ? value : 0;
+
+    return safeValue.toLocaleString("en-PH", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   const increaseQuantity = () => {
-    setQuantity((currentQuantity) => currentQuantity + 1);
+    setQuantity((currentQuantity) => {
+      if (hasStockInfo) {
+        return Math.min(currentQuantity + 1, stockQuantity);
+      }
+
+      return currentQuantity + 1;
+    });
   };
 
   const decreaseQuantity = () => {
@@ -69,6 +126,11 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
       return;
     }
 
+    if (outOfStock) {
+      setCartMessage("This product is out of stock.");
+      return;
+    }
+
     try {
       setAddingToCart(true);
       setCartMessage("");
@@ -84,7 +146,9 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
           body: JSON.stringify({
             product_id: product.product_id,
             quantity: quantity,
-            size: selectedSize
+            size: selectedSize,
+            wrap_style: selectedWrap,
+            gift_message: message.trim() || null
           })
         }
       );
@@ -98,11 +162,7 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
         return;
       }
 
-      console.log("Cart API response:", data);
-
-      setCartMessage("Added to cart successfully.");
-
-      onGoToCart();
+      setCartMessage("Added to your bag. Taking you there...");
 
       if (onAddToCart) {
         onAddToCart({
@@ -114,6 +174,14 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
           message
         });
       }
+
+      // Brief delay so the confirmation is actually visible
+      // before the cart page replaces this one.
+      window.setTimeout(() => {
+        if (onGoToCart) {
+          onGoToCart();
+        }
+      }, 700);
 
     } catch (error) {
       console.error("Add to cart error:", error);
@@ -141,7 +209,7 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
         <button
           type="button"
           className="logo"
-          onClick={onBack}
+          onClick={onHome || onBack}
         >
           bloombox<span>.</span>
         </button>
@@ -149,7 +217,7 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
         <nav>
           <button
             type="button"
-            onClick={onBack}
+            onClick={onHome || onBack}
           >
             Home
           </button>
@@ -162,38 +230,51 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
             Shop
           </button>
 
-          <button type="button">
+          <button
+            type="button"
+            onClick={onBack}
+          >
             Collections
           </button>
 
-          <button type="button">
+          <button
+            type="button"
+            onClick={onHome || onBack}
+          >
             Customize
           </button>
 
-          <button type="button">
+          <button
+            type="button"
+            onClick={onHome || onBack}
+          >
             About
           </button>
 
-          <button type="button">
+          <button
+            type="button"
+            onClick={onHome || onBack}
+          >
             Contact
           </button>
         </nav>
 
         <div className="nav-actions">
 
-          <button type="button" aria-label="Search">
+          <button
+            type="button"
+            aria-label="Search"
+            onClick={onBack}
+          >
             🔍
-          </button>
-
-          <button type="button" aria-label="Wishlist">
-            ♡
           </button>
 
           <button
             type="button"
             className="cart-button"
+            onClick={onGoToCart}
           >
-            Bag <span>0</span>
+            Bag <span>{cartCount}</span>
           </button>
 
         </div>
@@ -205,7 +286,7 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
 
         <button
           type="button"
-          onClick={onBack}
+          onClick={onHome || onBack}
         >
           Home
         </button>
@@ -323,15 +404,26 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
           <div className="price-row">
 
             <span className="price">
-              ₱
-              {Number(product.price).toLocaleString(
-                "en-PH",
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2
-                }
-              )}
+              ₱{formatPrice(product.price)}
             </span>
+
+            {hasStockInfo && (
+              <span
+                className={
+                  outOfStock
+                    ? "stock-note out"
+                    : stockQuantity <= 10
+                      ? "stock-note low"
+                      : "stock-note"
+                }
+              >
+                {outOfStock
+                  ? "Out of stock"
+                  : stockQuantity <= 10
+                    ? `Only ${stockQuantity} left`
+                    : `${stockQuantity} in stock`}
+              </span>
+            )}
 
           </div>
 
@@ -492,9 +584,13 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
               type="button"
               className="btn btn-dark add-to-bag"
               onClick={handleAddToCart}
-              disabled={addingToCart}
+              disabled={addingToCart || outOfStock}
             >
-              {addingToCart ? "Adding..." : "Add to Bag"}
+              {outOfStock
+                ? "Out of Stock"
+                : addingToCart
+                  ? "Adding..."
+                  : "Add to Bag"}
               <span>→</span>
             </button>
           </div>
@@ -508,6 +604,8 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
           <button
             type="button"
             className="text-link buy-now"
+            onClick={handleAddToCart}
+            disabled={addingToCart || outOfStock}
           >
             Buy it now
           </button>
@@ -702,6 +800,38 @@ function ProductDetails({ product, onBack, onAddToCart, onGoToCart }) {
           </button>
 
         </div>
+
+        {relatedProducts.length > 0 && (
+          <div className="product-grid related-grid">
+
+            {relatedProducts.map((item) => (
+              <article
+                className="product-card"
+                key={item.product_id}
+                style={{ cursor: "pointer" }}
+                onClick={() => onSelectProduct && onSelectProduct(item)}
+              >
+                {item.product_image ? (
+                  <img
+                    src={item.product_image}
+                    alt={item.product_name}
+                  />
+                ) : (
+                  <div className="product-image-placeholder">
+                    No image available
+                  </div>
+                )}
+
+                <div className="product-info">
+                  <h3>{item.product_name}</h3>
+                  <p>{item.category}</p>
+                  <strong>₱{formatPrice(item.price)}</strong>
+                </div>
+              </article>
+            ))}
+
+          </div>
+        )}
 
       </section>
 

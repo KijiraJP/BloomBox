@@ -70,6 +70,7 @@ function Cart({ onBack, onCheckout }) {
     }
 
     try {
+      setError("");
       setUpdatingItemId(cartItemId);
 
       const response = await fetch(
@@ -133,6 +134,7 @@ function Cart({ onBack, onCheckout }) {
     }
 
     try {
+      setError("");
       setRemovingItemId(cartItemId);
 
       const response = await fetch(
@@ -151,13 +153,6 @@ function Cart({ onBack, onCheckout }) {
         console.error("Remove item error:", data);
         setError(data.message || "Unable to remove item.");
         return;
-      }
-
-      if (data.custom_bouquet_id) {
-        sessionStorage.setItem(
-          "bouquetDraftId",
-          String(data.custom_bouquet_id)
-        );
       }
 
       // Refresh the cart after successful removal
@@ -208,7 +203,7 @@ function Cart({ onBack, onCheckout }) {
     );
   }
 
-  if (error) {
+  if (error && !cart) {
     return (
       <div className="cart-page">
         <section className="cart-hero">
@@ -233,6 +228,10 @@ function Cart({ onBack, onCheckout }) {
   }
 
   const items = cart?.items || [];
+  const totalQuantity = items.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
+  );
 
   return (
     <div className="cart-page">
@@ -266,6 +265,19 @@ function Cart({ onBack, onCheckout }) {
 
       {/* CART CONTENT */}
       <section className="cart-section">
+
+        {error && (
+          <div className="cart-error-banner" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              aria-label="Dismiss message"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {items.length === 0 ? (
 
@@ -302,8 +314,8 @@ function Cart({ onBack, onCheckout }) {
 
               <div className="cart-items-header">
                 <p>
-                  {items.length}{" "}
-                  {items.length === 1 ? "item" : "items"}
+                  {totalQuantity}{" "}
+                  {totalQuantity === 1 ? "item" : "items"}
                 </p>
               </div>
 
@@ -339,7 +351,7 @@ function Cart({ onBack, onCheckout }) {
                   <div className="cart-item-info">
 
                     <p className="cart-item-type">
-                      {item.item_type === "custom_bouquet" ? "Custom Bouquet" : "Flower"}
+                      {item.category || "Flower"}
                     </p>
 
                     <h3>
@@ -347,18 +359,23 @@ function Cart({ onBack, onCheckout }) {
                     </h3>
 
                     <p className="cart-item-option">
-                      Size: {item.size || "Medium"}
+                      {item.size ? `Size: ${item.size}` : "One size"}
                     </p>
 
-                    {item.item_type === "custom_bouquet" && (
-                      <p className="cart-item-option cart-custom-summary">
-                        {item.custom_flower_summary || "Custom flower arrangement"}
-                        {item.personalized_message ? ` · “${item.personalized_message}”` : ""}
+                    {item.wrap_style && (
+                      <p className="cart-item-option">
+                        Wrap: {item.wrap_style}
+                      </p>
+                    )}
+
+                    {item.gift_message && (
+                      <p className="cart-item-option cart-item-note">
+                        Note: &ldquo;{item.gift_message}&rdquo;
                       </p>
                     )}
 
                     {/* QUANTITY CONTROLS */}
-                    {item.item_type !== "custom_bouquet" && <div className="cart-quantity">
+                    <div className="cart-quantity">
 
                       <span>
                         Quantity
@@ -393,7 +410,8 @@ function Cart({ onBack, onCheckout }) {
                           type="button"
                           className="cart-quantity-button"
                           disabled={
-                            updatingItemId === item.cart_item_id
+                            updatingItemId === item.cart_item_id ||
+                            item.quantity >= Number(item.stock_quantity ?? 0)
                           }
                           onClick={() =>
                             updateQuantity(
@@ -407,7 +425,7 @@ function Cart({ onBack, onCheckout }) {
 
                       </div>
 
-                    </div>}
+                    </div>
                     
                     <button
                         type="button"
@@ -429,9 +447,7 @@ function Cart({ onBack, onCheckout }) {
                     </p>
 
                     <span>
-                      {item.item_type === "custom_bouquet"
-                        ? "Custom arrangement total"
-                        : `₱${formatPrice(item.unit_price)} each`}
+                      ₱{formatPrice(item.unit_price)} each
                     </span>
 
                   </div>

@@ -301,7 +301,7 @@
 
 /* QR PANEL */
 .qr-panel {
-  display: none;
+  display: flex;
   gap: 28px;
   margin-top: 18px;
   padding: 26px;
@@ -609,7 +609,7 @@
 .checkout-page { min-height: 100vh; background: var(--cream); color: var(--ink); }
 .checkout-hero-content { max-width: 760px; }
 .checkout-hero-content > p:not(.eyebrow) { color: var(--muted); line-height: 1.8; max-width: 560px; }
-.checkout-back-button { margin-bottom: 22px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--rose-dark); }
+.checkout-schedule-note { color: var(--muted); line-height: 1.7; max-width: 560px; font-size: 13px; }.checkout-back-button { margin-bottom: 22px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--rose-dark); }
 .checkout-back-button:hover { color: var(--rose); }
 .checkout-section { background: #fff; }
 .checkout-main { display: flex; flex-direction: column; gap: 22px; }
@@ -625,6 +625,8 @@
 .checkout-payment-option { display: flex; align-items: center; gap: 10px; padding: 15px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: 700; transition: .2s ease; }
 .checkout-payment-option:hover { border-color: var(--rose); background: var(--pink-light); }
 .checkout-payment-option input { accent-color: var(--rose); }
+.checkout-payment-option span { display: flex; flex-direction: column; gap: 3px; }
+.checkout-payment-option small { font-size: 10px; font-weight: 600; color: var(--muted); }
 .checkout-summary { position: sticky; top: 26px; background: var(--pink-light); border: 1px solid var(--line); border-radius: 18px; padding: 28px 25px; }
 .checkout-summary h2 { margin: 12px 0 22px; font-size: 28px; }
 .checkout-summary-items { display: flex; flex-direction: column; gap: 15px; }

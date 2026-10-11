@@ -1,13 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "../bloombox.css";
 import "./checkout.css";
 
-function Checkout({ onBack, onContinue }) {
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const nowLocal = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+function Checkout({ user, onBack, onContinue }) {
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState((user && user.email) || "");
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [mobileNumber, setMobileNumber] = useState("");
 
@@ -24,6 +33,18 @@ function Checkout({ onBack, onContinue }) {
   const [checkoutData, setCheckoutData] = useState(null);
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
+  const [gatewayMessage, setGatewayMessage] = useState("");
+  const [gatewayInProgress, setGatewayInProgress] = useState(false);
+  const [gatewayInterrupted, setGatewayInterrupted] = useState(false);
+  const [timeoutSeconds, setTimeoutSeconds] = useState(300); // 5 min
+  const gatewayPollRef = useRef(null);
+  const timeoutTimerRef = useRef(null);
+
+  // Tracks what has already been created so a retry after a mid-checkout
+  // failure can never create a duplicate address, order, or delivery.
+  const [createdAddress, setCreatedAddress] = useState(null);
+  const [createdOrder, setCreatedOrder] = useState(null);
+  const [createdDelivery, setCreatedDelivery] = useState(null);
 
   useEffect(() => {
     const fetchCart = async () => {
@@ -84,68 +105,6 @@ function Checkout({ onBack, onContinue }) {
     }
   };
 
-  const handleTestPayment = async () => {
-  const token = sessionStorage.getItem("token");
-
-  if (!token) {
-    setError("Your login session has expired. Please log in again.");
-    return;
-  }
-
-  if (!paymentInfo?.payment_id) {
-    setError("No payment was created for this order.");
-    return;
-  }
-
-  try {
-    setPaymentProcessing(true);
-    setError("");
-
-    const response = await fetch(
-      `http://localhost:5000/api/payments/${paymentInfo.payment_id}/status`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          payment_status: "successful",
-          transaction_reference: `TEST-GCASH-${paymentInfo.payment_id}`
-        })
-      }
-    );
-
-    const data = await response.json();
-
-      if (!response.ok) {
-        setError(
-          data.message ||
-          "Payment could not be completed."
-        );
-        return;
-      }
-
-      console.log("Payment successful:", data);
-
-      setPaymentResult(data);
-
-      onContinue({
-        ...checkoutData,
-      paymentResult: data
-    });
-
-  } catch (error) {
-    console.error("Payment error:", error);
-
-    setError(
-      "Cannot connect to the server while processing payment."
-    );
-  } finally {
-    setPaymentProcessing(false);
-  }
-};
-  
   const handleContinue = async (event) => {
   event.preventDefault();
 
@@ -159,107 +118,135 @@ function Checkout({ onBack, onContinue }) {
   try {
     setError("");
 
+    const items = cart?.items || [];
+
+    if (items.length === 0) {
+      setError("Your bag is empty. Add some blooms before checking out.");
+      return;
+    }
+
     // -----------------------------------
     // STEP 1 — Save delivery address
     // -----------------------------------
 
-    const addressResponse = await fetch(
-      "http://localhost:5000/api/addresses",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          street: street.trim(),
-          barangay: barangay.trim(),
-          city: city.trim(),
-          postalCode: postalCode.trim(),
-          landmark: landmark.trim()
-        })
-      }
-    );
+    let addressId = createdAddress?.address_id;
 
-    const addressData = await addressResponse.json();
-
-    if (!addressResponse.ok) {
-      setError(
-        addressData.message ||
-        "Unable to save delivery address."
+    if (!addressId) {
+      const addressResponse = await fetch(
+        "http://localhost:5000/api/addresses",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            street: street.trim(),
+            barangay: barangay.trim(),
+            city: city.trim(),
+            postalCode: postalCode.trim(),
+            landmark: landmark.trim()
+          })
+        }
       );
-      return;
-    }
 
-    console.log(
-      "Address saved:",
-      addressData.address
-    );
+      const addressData = await addressResponse.json();
+
+      if (!addressResponse.ok) {
+        setError(
+          addressData.message ||
+          "Unable to save delivery address."
+        );
+        return;
+      }
+
+      addressId = addressData.address.address_id;
+      setCreatedAddress(addressData.address);
+
+      console.log(
+        "Address saved:",
+        addressData.address
+      );
+    }
 
     // -----------------------------------
     // STEP 2 — Create the order
     // -----------------------------------
 
-    const orderResponse = await fetch(
-      "http://localhost:5000/api/orders",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          address_id: addressData.address.address_id
-        })
-      }
-    );
+    let orderData = createdOrder;
 
-    const orderData = await orderResponse.json();
-
-    if (!orderResponse.ok) {
-      setError(
-        orderData.message ||
-        "Unable to create your order."
+    if (!orderData) {
+      const orderResponse = await fetch(
+        "http://localhost:5000/api/orders",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            address_id: addressId
+          })
+        }
       );
-      return;
-    }
 
-    console.log(
-      "Order created:",
-      orderData
-    );
+      orderData = await orderResponse.json();
+
+      if (!orderResponse.ok) {
+        setError(
+          orderData.message ||
+          "Unable to create your order."
+        );
+        return;
+      }
+
+      setCreatedOrder(orderData);
+
+      console.log(
+        "Order created:",
+        orderData
+      );
+    }
 
     // -----------------------------------
     // STEP 3 — Save the requested delivery schedule
     // -----------------------------------
 
-    const deliveryResponse = await fetch(
-      "http://localhost:5000/api/deliveries",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          order_id: orderData.order_id,
-          delivery_date: deliveryDate,
-          delivery_time: deliveryTime
-        })
-      }
-    );
+    let deliveryData = createdDelivery
+      ? { delivery: createdDelivery }
+      : null;
 
-    const deliveryData = await deliveryResponse.json();
-
-    if (!deliveryResponse.ok) {
-      setError(
-        deliveryData.message ||
-        "Unable to save your delivery schedule."
+    if (!deliveryData) {
+      const deliveryResponse = await fetch(
+        "http://localhost:5000/api/deliveries",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            order_id: orderData.order_id,
+            delivery_date: deliveryDate,
+            delivery_time: deliveryTime
+          })
+        }
       );
-      return;
-    }
 
-    console.log("Delivery schedule saved:", deliveryData.delivery);
+      deliveryData = await deliveryResponse.json();
+
+      if (!deliveryResponse.ok) {
+        setError(
+          deliveryData.message ||
+          "Unable to save your delivery schedule."
+        );
+        return;
+      }
+
+      setCreatedDelivery(deliveryData.delivery);
+
+      console.log("Delivery schedule saved:", deliveryData.delivery);
+    }
 
     // -----------------------------------
     // STEP 4 — Create payment attempt
@@ -296,7 +283,14 @@ function Checkout({ onBack, onContinue }) {
     );
 
     if (paymentMethod === "cod") {
-      await clearCodCartItems(orderData.order_id, token);
+      try {
+        await clearCodCartItems(orderData.order_id, token);
+      } catch (clearError) {
+        // Non-fatal: the order already exists. Turning this into an
+        // error screen would let the customer retry and create a
+        // duplicate order - leftover bag items are the lesser problem.
+        console.error("Cart clear warning:", clearError);
+      }
     }
 
     // -----------------------------------
@@ -306,7 +300,7 @@ function Checkout({ onBack, onContinue }) {
     const newCheckoutData = {
     email,
     mobileNumber,
-    address: addressData.address,
+    address: { address_id: addressId },
     deliveryDate,
     deliveryTime,
     delivery: deliveryData.delivery,
@@ -334,52 +328,6 @@ function Checkout({ onBack, onContinue }) {
     );
   }
 };
-
-  const handleTestPaymentFailure = async () => {
-    const token = sessionStorage.getItem("token");
-
-    if (!token || !paymentInfo?.payment_id) {
-      setError("Your login session has expired. Please log in again.");
-      return;
-    }
-
-    try {
-      setPaymentProcessing(true);
-      setError("");
-
-      const response = await fetch(
-        `http://localhost:5000/api/payments/${paymentInfo.payment_id}/status`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            payment_status: "failed",
-            transaction_reference: `TEST-FAILED-${paymentInfo.payment_id}`
-          })
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.message || "Payment could not be marked as failed.");
-        return;
-      }
-
-      setPaymentInfo((currentPayment) => ({
-        ...currentPayment,
-        ...data
-      }));
-    } catch (error) {
-      console.error("Payment failure test error:", error);
-      setError("Cannot connect to the server while updating payment status.");
-    } finally {
-      setPaymentProcessing(false);
-    }
-  };
 
   const handleRetryPayment = async () => {
     const token = sessionStorage.getItem("token");
@@ -423,6 +371,119 @@ function Checkout({ onBack, onContinue }) {
       setPaymentProcessing(false);
     }
   };
+
+  const startGatewayPayment = async () => {
+    const token = sessionStorage.getItem("token");
+
+    if (!token || !paymentInfo?.payment_id) {
+      setGatewayMessage("Payment details are unavailable. Please try checkout again.");
+      return;
+    }
+
+    try {
+      setPaymentProcessing(true);
+      setGatewayMessage("");
+      setGatewayInProgress(false);
+      setGatewayInterrupted(false);
+
+      const response = await fetch(
+        `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/invoice`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setGatewayInProgress(false);
+        setGatewayInterrupted(true);
+        setGatewayMessage(data.message || "Could not start the online payment.");
+        return;
+      }
+
+      setPaymentInfo((currentPayment) => ({ ...currentPayment, ...data }));
+
+      window.open(data.checkout_url, "_blank", "noopener");
+      setGatewayInProgress(true);
+      setGatewayInterrupted(false);
+      setGatewayMessage("");
+      startPollGateway();
+    } catch (error) {
+      console.error("Gateway payment error:", error);
+      setGatewayInProgress(false);
+      setGatewayInterrupted(true);
+      setGatewayMessage("Cannot connect to the server while starting payment.");
+    } finally {
+      setPaymentProcessing(false);
+    }
+  };
+
+  const stopGatewayTimers = () => {
+    if (gatewayPollRef.current) {
+      clearInterval(gatewayPollRef.current);
+      gatewayPollRef.current = null;
+    }
+    if (timeoutTimerRef.current) {
+      clearInterval(timeoutTimerRef.current);
+      timeoutTimerRef.current = null;
+    }
+  };
+
+  const startPollGateway = () => {
+    stopGatewayTimers();
+
+    let tries = 0;
+    const maxTries = 150; // 5 minutes at 2s
+    setTimeoutSeconds(300);
+
+    gatewayPollRef.current = setInterval(async () => {
+      const token = sessionStorage.getItem("token");
+      if (!token || !paymentInfo?.payment_id) return;
+
+      tries++;
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/payments/${paymentInfo.payment_id}/xendit/verify`,
+          { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await response.json();
+
+        if (response.ok && data.payment_status === "successful") {
+          stopGatewayTimers();
+          setPaymentResult(data);
+          onContinue({ ...checkoutData, paymentResult: data });
+          return;
+        }
+
+        if (response.ok) {
+          setPaymentInfo((current) => ({ ...current, ...data }));
+        }
+
+        if (tries > maxTries) {
+          stopGatewayTimers();
+          setGatewayInProgress(false);
+          setGatewayInterrupted(true);
+        }
+      } catch (error) {
+        if (tries > maxTries) {
+          stopGatewayTimers();
+          setGatewayInProgress(false);
+          setGatewayInterrupted(true);
+        }
+      }
+    }, 2000);
+
+    timeoutTimerRef.current = setInterval(() => {
+      setTimeoutSeconds((s) => (s <= 1 ? 0 : s - 1));
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopGatewayTimers();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   if (loading) {
     return (
@@ -499,7 +560,7 @@ function Checkout({ onBack, onContinue }) {
                   className="btn btn-dark checkout-continue-button"
                   onClick={onBack}
                 >
-                  Continue Shopping
+                  Return to Home
                 </button>
               </section>
             </div>
@@ -600,6 +661,14 @@ function Checkout({ onBack, onContinue }) {
                 >
                   {paymentProcessing ? "Creating retry..." : "Try Payment Again"}
                 </button>
+
+                <button
+                  type="button"
+                  className="btn checkout-continue-button"
+                  onClick={onBack}
+                >
+                  ← Back to Cart
+                </button>
               </section>
             </div>
           </div>
@@ -609,14 +678,32 @@ function Checkout({ onBack, onContinue }) {
   }
 
   if (paymentInfo) {
+    const invoiceReady = Boolean(paymentInfo.gateway_invoice_id);
+    const isPaid = ["successful", "paid", "settled", "succeeded"].includes(
+      (paymentInfo.payment_status || "").toLowerCase()
+    ) || ["paid", "settled", "succeeded"].includes(
+      (paymentInfo.gateway_status || "").toLowerCase()
+    );
+
+    if (isPaid && !paymentResult) {
+      // Promote to success screen to match flow
+      setPaymentResult({
+        order_id: paymentInfo.order_id,
+        payment_status: paymentInfo.payment_status || "successful",
+        order_status: paymentInfo.order_status || "processing",
+        transaction_reference: paymentInfo.transaction_reference || paymentInfo.gateway_invoice_id || ""
+      });
+    }
+
     return (
       <div className="checkout-page">
         <section className="checkout-hero">
           <div className="checkout-hero-content">
             <p className="eyebrow">STEP 3 OF 3</p>
-            <h1>Complete your test payment.</h1>
+            <h1>Complete your payment.</h1>
             <p>
-              This temporary screen simulates a verified payment for development testing.
+              Pay securely with GCash, Maya, or a card through Xendit, then
+              verify your payment here.
             </p>
           </div>
         </section>
@@ -625,7 +712,7 @@ function Checkout({ onBack, onContinue }) {
           <div className="checkout-layout">
             <div className="checkout-main">
               <section className="checkout-card">
-                <p className="eyebrow">TEST PAYMENT</p>
+                <p className="eyebrow">ONLINE PAYMENT</p>
                 <h2>Payment pending</h2>
                 <div className="checkout-summary-row">
                   <span>Order</span>
@@ -633,7 +720,7 @@ function Checkout({ onBack, onContinue }) {
                 </div>
                 <div className="checkout-summary-row">
                   <span>Payment method</span>
-                  <strong>{paymentInfo.payment_method.replace("_", " ")}</strong>
+                  <strong>{paymentInfo.payment_method === "cod" ? "Cash on Delivery" : "E-Wallets / Cards"}</strong>
                 </div>
                 <div className="checkout-summary-row">
                   <span>Amount</span>
@@ -641,25 +728,94 @@ function Checkout({ onBack, onContinue }) {
                 </div>
                 <div className="checkout-summary-row">
                   <span>Status</span>
-                  <strong>{paymentInfo.payment_status}</strong>
+                  <strong>
+                    {paymentInfo.gateway_status || paymentInfo.payment_status}
+                  </strong>
                 </div>
 
-                <button
-                  type="button"
-                  className="btn btn-dark checkout-continue-button"
-                  onClick={handleTestPayment}
-                  disabled={paymentProcessing}
-                >
-                  {paymentProcessing ? "Completing payment..." : "Complete Test Payment"}
-                </button>
+                {isPaid ? (
+                  <>
+                    <h2>Payment Completed</h2>
+                    <button
+                      type="button"
+                      className="btn btn-dark checkout-continue-button"
+                      onClick={() =>
+                        onContinue({
+                          ...checkoutData,
+                          paymentResult: {
+                            order_id: paymentInfo.order_id,
+                            payment_status: paymentInfo.payment_status || "successful",
+                            order_status: paymentInfo.order_status || "processing",
+                            transaction_reference:
+                              paymentInfo.transaction_reference || paymentInfo.gateway_invoice_id || ""
+                          }
+                        })
+                      }
+                    >
+                      Return to Home
+                    </button>
+                  </>
+                ) : gatewayInProgress ? (
+                  <>
+                    <h2>Processing Payment...</h2>
+                    <p className="checkout-schedule-note" style={{ marginBottom: "5px" }}>
+                      Time remaining: {Math.floor(timeoutSeconds / 60)}:{String(timeoutSeconds % 60).padStart(2, "0")}
+                    </p>
+                    {paymentInfo?.checkout_url && (
+                      <p className="checkout-schedule-note" style={{ marginBottom: "10px", fontSize: "11px" }}>
+                        Can't redirect to link?{" "}
+                        <a href={paymentInfo.checkout_url} target="_blank" rel="noopener noreferrer">
+                          Click here to proceed to another tab
+                        </a>
+                      </p>
+                    )}
+                  </>
+                ) : gatewayInterrupted ? (
+                  <>
+                    <h2>Payment Pending</h2>
+                    <p className="checkout-schedule-note" style={{ marginBottom: "10px" }}>
+                      Payment Timeout
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-dark checkout-continue-button"
+                      onClick={startGatewayPayment}
+                      disabled={paymentProcessing}
+                    >
+                      {paymentProcessing ? "Starting payment..." : "Retry Payment"}
+                    </button>
+                    {paymentInfo?.checkout_url && (
+                      <p className="checkout-schedule-note" style={{ marginBottom: "10px", fontSize: "11px" }}>
+                        <a href={paymentInfo.checkout_url} target="_blank" rel="noopener noreferrer">
+                          Click here to return to Xendit checkout
+                        </a>
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h2>Payment pending</h2>
+                    <button
+                      type="button"
+                      className="btn btn-dark checkout-continue-button"
+                      onClick={startGatewayPayment}
+                      disabled={paymentProcessing}
+                    >
+                      {paymentProcessing ? "Starting payment..." : "Proceed to Payment"}
+                    </button>
+                  </>
+                )}
+
+                {gatewayMessage && (
+                  <p className="checkout-schedule-note">{gatewayMessage}</p>
+                )}
 
                 <button
                   type="button"
                   className="btn checkout-continue-button"
-                  onClick={handleTestPaymentFailure}
-                  disabled={paymentProcessing}
+                  onClick={onBack}
                 >
-                  Simulate Test Failure
+                  ← Back to Cart
                 </button>
               </section>
             </div>
@@ -885,24 +1041,33 @@ function Checkout({ onBack, onContinue }) {
               </p>
 
               <h2>
-                Delivery schedule
+                Preferred delivery schedule
               </h2>
+
+              <p className="checkout-schedule-note">
+                Tell us when you'd prefer your flowers to arrive — BloomBox will
+                confirm the schedule before delivery.
+              </p>
 
               <div className="checkout-form-grid">
 
                 <div className="checkout-field">
 
                   <label htmlFor="delivery-date">
-                    Delivery date
+                    Preferred date
                   </label>
 
                   <input
                     id="delivery-date"
                     type="date"
                     value={deliveryDate}
-                    onChange={(event) =>
-                      setDeliveryDate(event.target.value)
-                    }
+                    min={todayLocal()}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value && value < todayLocal()) return setDeliveryDate("");
+                      setDeliveryDate(value);
+                      if (value === todayLocal() && deliveryTime && deliveryTime <= nowLocal()) setDeliveryTime("");
+                    }}
                     required
                   />
 
@@ -911,16 +1076,19 @@ function Checkout({ onBack, onContinue }) {
                 <div className="checkout-field">
 
                   <label htmlFor="delivery-time">
-                    Delivery time
+                    Preferred time
                   </label>
 
                   <input
                     id="delivery-time"
                     type="time"
                     value={deliveryTime}
-                    onChange={(event) =>
-                      setDeliveryTime(event.target.value)
-                    }
+                    min={deliveryDate === todayLocal() ? nowLocal() : undefined}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (deliveryDate === todayLocal() && value && value <= nowLocal()) return setDeliveryTime("");
+                      setDeliveryTime(value);
+                    }}
                     required
                   />
 
@@ -958,45 +1126,8 @@ function Checkout({ onBack, onContinue }) {
                   />
 
                   <span>
-                    GCash
-                  </span>
-
-                </label>
-
-
-                <label className="checkout-payment-option">
-
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="maya"
-                    checked={paymentMethod === "maya"}
-                    onChange={(event) =>
-                      setPaymentMethod(event.target.value)
-                    }
-                  />
-
-                  <span>
-                    Maya
-                  </span>
-
-                </label>
-
-
-                <label className="checkout-payment-option">
-
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="credit_card"
-                    checked={paymentMethod === "credit_card"}
-                    onChange={(event) =>
-                      setPaymentMethod(event.target.value)
-                    }
-                  />
-
-                  <span>
-                    Credit / Debit Card
+                    E-Wallets / Cards
+                    <small>GCash · Maya · Credit / Debit card</small>
                   </span>
 
                 </label>
@@ -1016,6 +1147,7 @@ function Checkout({ onBack, onContinue }) {
 
                   <span>
                     Cash on Delivery
+                    <small>Pay when your flowers arrive</small>
                   </span>
 
                 </label>
@@ -1055,7 +1187,8 @@ function Checkout({ onBack, onContinue }) {
                     </strong>
 
                     <span>
-                      {item.size} × {item.quantity}
+                      {item.size || "One size"} × {item.quantity}
+                      {item.gift_message ? " · gift note" : ""}
                     </span>
 
                   </div>
@@ -1113,8 +1246,9 @@ function Checkout({ onBack, onContinue }) {
             <button
               type="submit"
               className="btn btn-dark checkout-continue-button"
+              disabled={items.length === 0}
             >
-              Continue
+              {items.length === 0 ? "Your bag is empty" : "Continue"}
             </button>
 
           </aside>
